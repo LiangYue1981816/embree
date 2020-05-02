@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -108,11 +95,19 @@ namespace embree
                           const vfloat<K>& tnear = zero, const vfloat<K>& tfar = inf,
                           const vfloat<K>& time = zero, const vint<K>& mask = -1, const vint<K>& id = 0, const vint<K>& flags = 0)
       : RayK<K>(org, dir, tnear, tfar, time, mask, id, flags),
-        geomID(RTC_INVALID_GEOMETRY_ID) {}
+        geomID(RTC_INVALID_GEOMETRY_ID) 
+    {
+      for (unsigned l = 0; l < RTC_MAX_INSTANCE_LEVEL_COUNT; ++l)
+        instID[l] = RTC_INVALID_GEOMETRY_ID;
+    }
 
     __forceinline RayHitK(const RayK<K>& ray)
       : RayK<K>(ray),
-        geomID(RTC_INVALID_GEOMETRY_ID) {}
+        geomID(RTC_INVALID_GEOMETRY_ID) 
+    {
+      for (unsigned l = 0; l < RTC_MAX_INSTANCE_LEVEL_COUNT; ++l)
+        instID[l] = RTC_INVALID_GEOMETRY_ID;
+    }
 
     __forceinline RayHitK<K>& operator =(const RayK<K>& ray)
     {
@@ -126,6 +121,8 @@ namespace embree
       flags  = ray.flags;
 
       geomID = RTC_INVALID_GEOMETRY_ID;
+      for (unsigned l = 0; l < RTC_MAX_INSTANCE_LEVEL_COUNT; ++l)
+        instID[l] = RTC_INVALID_GEOMETRY_ID;
 
       return *this;
     }
@@ -395,45 +392,43 @@ namespace embree
 
   /* Outputs ray to stream */
   template<int K>
-  inline std::ostream& operator <<(std::ostream& cout, const RayK<K>& ray)
+  __forceinline embree_ostream operator <<(embree_ostream cout, const RayK<K>& ray)
   {
-    return cout << "{ " << std::endl
-                << "  org = " << ray.org << std::endl
-                << "  dir = " << ray.dir << std::endl
-                << "  near = " << ray.tnear() << std::endl
-                << "  far = " << ray.tfar << std::endl
-                << "  time = " << ray.time() << std::endl
-                << "  mask = " << ray.mask << std::endl
-                << "  id = " << ray.id << std::endl
-                << "  flags = " << ray.flags << std::endl
+    return cout << "{ " << embree_endl
+                << "  org = " << ray.org << embree_endl
+                << "  dir = " << ray.dir << embree_endl
+                << "  near = " << ray.tnear() << embree_endl
+                << "  far = " << ray.tfar << embree_endl
+                << "  time = " << ray.time() << embree_endl
+                << "  mask = " << ray.mask << embree_endl
+                << "  id = " << ray.id << embree_endl
+                << "  flags = " << ray.flags << embree_endl
                 << "}";
   }
 
   template<int K>
-  inline std::ostream& operator <<(std::ostream& cout, const RayHitK<K>& ray)
+  __forceinline embree_ostream operator <<(embree_ostream cout, const RayHitK<K>& ray)
   {
-    cout << "{ " << std::endl
-         << "  org = " << ray.org << std::endl
-         << "  dir = " << ray.dir << std::endl
-         << "  near = " << ray.tnear() << std::endl
-         << "  far = " << ray.tfar << std::endl
-         << "  time = " << ray.time() << std::endl
-         << "  mask = " << ray.mask << std::endl
-         << "  id = " << ray.id << std::endl
-         << "  flags = " << ray.flags << std::endl
+    cout << "{ " << embree_endl
+         << "  org = " << ray.org << embree_endl
+         << "  dir = " << ray.dir << embree_endl
+         << "  near = " << ray.tnear() << embree_endl
+         << "  far = " << ray.tfar << embree_endl
+         << "  time = " << ray.time() << embree_endl
+         << "  mask = " << ray.mask << embree_endl
+         << "  id = " << ray.id << embree_endl
+         << "  flags = " << ray.flags << embree_endl
          << "  Ng = " << ray.Ng
-         << "  u = " << ray.u <<  std::endl
-         << "  v = " << ray.v << std::endl
-         << "  primID = " << ray.primID <<  std::endl
-         << "  geomID = " << ray.geomID << std::endl
+         << "  u = " << ray.u <<  embree_endl
+         << "  v = " << ray.v << embree_endl
+         << "  primID = " << ray.primID <<  embree_endl
+         << "  geomID = " << ray.geomID << embree_endl
          << "  instID =";
     for (unsigned l = 0; l < RTC_MAX_INSTANCE_LEVEL_COUNT; ++l)
     {
       cout << " " << ray.instID[l];
-      if (ray.instID[l] == RTC_INVALID_GEOMETRY_ID)
-        break;
     }
-    cout << std::endl;
+    cout << embree_endl;
     return cout << "}";
   }
 
@@ -598,7 +593,7 @@ namespace embree
 
           vuint<K>::storeu(valid, instID(0, offset), ray.instID[0]);
 #if (RTC_MAX_INSTANCE_LEVEL_COUNT > 1)
-          for (unsigned l = 1; l < RTC_MAX_INSTANCE_LEVEL_COUNT && any(ray.instID[l-1] != RTC_INVALID_GEOMETRY_ID); ++l)
+          for (unsigned l = 1; l < RTC_MAX_INSTANCE_LEVEL_COUNT && any(valid & (ray.instID[l-1] != RTC_INVALID_GEOMETRY_ID)); ++l)
             vuint<K>::storeu(valid, instID(l, offset), ray.instID[l]);
 #endif
         }
@@ -704,7 +699,7 @@ namespace embree
 
         vuint<K>::template scatter<1>(valid, instID(0), offset, ray.instID[0]);
 #if (RTC_MAX_INSTANCE_LEVEL_COUNT > 1)
-        for (unsigned l = 1; l < RTC_MAX_INSTANCE_LEVEL_COUNT && any(ray.instID[l-1] != RTC_INVALID_GEOMETRY_ID); ++l)
+        for (unsigned l = 1; l < RTC_MAX_INSTANCE_LEVEL_COUNT && any(valid & (ray.instID[l-1] != RTC_INVALID_GEOMETRY_ID)); ++l)
           vuint<K>::template scatter<1>(valid, instID(l), offset, ray.instID[l]);
 #endif
 #else
@@ -895,7 +890,7 @@ namespace embree
 
         vuint<K>::storeu(valid, (unsigned int* __restrict__)((char*)instID[0] + offset), ray.instID[0]);
 #if (RTC_MAX_INSTANCE_LEVEL_COUNT > 1)
-        for (unsigned l = 1; l < RTC_MAX_INSTANCE_LEVEL_COUNT && any(ray.instID[l-1] != RTC_INVALID_GEOMETRY_ID); ++l)
+        for (unsigned l = 1; l < RTC_MAX_INSTANCE_LEVEL_COUNT && any(valid & (ray.instID[l-1] != RTC_INVALID_GEOMETRY_ID)); ++l)
           vuint<K>::storeu(valid, (unsigned int* __restrict__)((char*)instID[l] + offset), ray.instID[l]);
 #endif
       }
@@ -1009,7 +1004,7 @@ namespace embree
 
         vuint<K>::template scatter<1>(valid, (unsigned int*)instID[0], offset, ray.instID[0]);
 #if (RTC_MAX_INSTANCE_LEVEL_COUNT > 1)
-        for (unsigned l = 1; l < RTC_MAX_INSTANCE_LEVEL_COUNT && any(ray.instID[l-1] != RTC_INVALID_GEOMETRY_ID); ++l)
+        for (unsigned l = 1; l < RTC_MAX_INSTANCE_LEVEL_COUNT && any(valid & (ray.instID[l-1] != RTC_INVALID_GEOMETRY_ID)); ++l)
           vuint<K>::template scatter<1>(valid, (unsigned int*)instID[l], offset, ray.instID[l]);
 #endif
 #else
@@ -1132,7 +1127,7 @@ namespace embree
 
         vuint<K>::template scatter<1>(valid, (unsigned int*)&((RayHit*)ptr)->instID[0], offset, ray.instID[0]);
 #if (RTC_MAX_INSTANCE_LEVEL_COUNT > 1)
-        for (unsigned l = 1; l < RTC_MAX_INSTANCE_LEVEL_COUNT && any(ray.instID[l-1] != RTC_INVALID_GEOMETRY_ID); ++l)
+        for (unsigned l = 1; l < RTC_MAX_INSTANCE_LEVEL_COUNT && any(valid & (ray.instID[l-1] != RTC_INVALID_GEOMETRY_ID)); ++l)
           vuint<K>::template scatter<1>(valid, (unsigned int*)&((RayHit*)ptr)->instID[l], offset, ray.instID[l]);
 #endif
 #else

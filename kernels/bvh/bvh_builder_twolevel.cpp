@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #include "bvh_builder_twolevel.h"
 #include "bvh_statistics.h"
@@ -68,7 +55,7 @@ namespace embree
       bvh->alloc.reset();
       
       /* skip build for empty scene */
-      const size_t numPrimitives = scene->getNumPrimitives<Mesh,false>();
+      const size_t numPrimitives = scene->getNumPrimitives(Mesh::geom_type,false);
 
       if (numPrimitives == 0) {
         prims.resize(0);
@@ -98,7 +85,7 @@ namespace embree
           /* create BVH and builder for new meshes */
           if (objects[objectID] == nullptr) {
             Builder* builder = nullptr;
-            createMeshAccel(mesh,(AccelData*&)objects[objectID],builder);
+            createMeshAccel(scene, unsigned(objectID),(AccelData*&)objects[objectID],builder);
             builders[objectID] = BuilderState(builder,mesh->quality);
           }
 
@@ -106,7 +93,7 @@ namespace embree
           else if (mesh->quality != builders[objectID].quality) {
             Builder* builder = nullptr;
             delete objects[objectID]; 
-            createMeshAccel(mesh,(AccelData*&)objects[objectID],builder);
+            createMeshAccel(scene, unsigned(objectID),(AccelData*&)objects[objectID],builder);
             builders[objectID] = BuilderState(builder,mesh->quality);
           }
         }
@@ -124,9 +111,9 @@ namespace embree
         
           BVH*     object  = objects [objectID]; assert(object);
           Ref<Builder>& builder = builders[objectID].builder; assert(builder);
-          
+
           /* build object if it got modified */
-          if (mesh->isModified())
+          if (scene->isGeometryModified(objectID))
             builder->build();
 
           /* create build primitive */
@@ -303,7 +290,7 @@ namespace embree
       {
         NodeRef ref = refs[i].node;
         if (ref.isAlignedNode())
-          ref.prefetch();
+          BVH::prefetch(ref);
       }
 #endif
 

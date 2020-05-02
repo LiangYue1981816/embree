@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -34,18 +21,16 @@ namespace embree
     CurveGeometry (Device* device, Geometry::GType gtype);
     
   public:
-    void enabling();
-    void disabling();
     void setMask(unsigned mask);
     void setNumTimeSteps (unsigned int numTimeSteps);
     void setVertexAttributeCount (unsigned int N);
     void setBuffer(RTCBufferType type, unsigned int slot, RTCFormat format, const Ref<Buffer>& buffer, size_t offset, size_t stride, unsigned int num);
     void* getBuffer(RTCBufferType type, unsigned int slot);
     void updateBuffer(RTCBufferType type, unsigned int slot);
-    void preCommit();
-    void postCommit();
+    void commit();
     bool verify();
     void setTessellationRate(float N);
+    void addElementsToCount (GeometryCounts & counts) const;
 
   public:
     
@@ -57,14 +42,6 @@ namespace embree
     /*! returns the i'th curve */
     __forceinline const unsigned int& curve(size_t i) const {
       return curves[i];
-    }
-
-    /*! returns the i'th segment */
-    __forceinline unsigned int getStartEndBitMask(size_t i) const {
-      unsigned int mask = 0;
-      if (flags) 
-        mask |= (flags[i] & 0x3) << 30;
-      return mask;
     }
 
     /*! returns i'th vertex of the first time step */

@@ -1,18 +1,5 @@
-## ======================================================================== ##
-## Copyright 2009-2018 Intel Corporation                                    ##
-##                                                                          ##
-## Licensed under the Apache License, Version 2.0 (the "License");          ##
-## you may not use this file except in compliance with the License.         ##
-## You may obtain a copy of the License at                                  ##
-##                                                                          ##
-##     http://www.apache.org/licenses/LICENSE-2.0                           ##
-##                                                                          ##
-## Unless required by applicable law or agreed to in writing, software      ##
-## distributed under the License is distributed on an "AS IS" BASIS,        ##
-## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. ##
-## See the License for the specific language governing permissions and      ##
-## limitations under the License.                                           ##
-## ======================================================================== ##
+## Copyright 2009-2020 Intel Corporation
+## SPDX-License-Identifier: Apache-2.0
 
 INCLUDE(GNUInstallDirs)
 
@@ -61,6 +48,8 @@ INSTALL(FILES ${PROJECT_SOURCE_DIR}/LICENSE.txt DESTINATION ${CMAKE_INSTALL_DOCD
 INSTALL(FILES ${PROJECT_SOURCE_DIR}/CHANGELOG.md DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT lib)
 INSTALL(FILES ${PROJECT_SOURCE_DIR}/README.md DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT lib)
 INSTALL(FILES ${PROJECT_SOURCE_DIR}/readme.pdf DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT lib)
+INSTALL(FILES ${PROJECT_SOURCE_DIR}/third-party-programs.txt DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT lib)
+INSTALL(FILES ${PROJECT_SOURCE_DIR}/third-party-programs-TBB.txt DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT lib)
 
 ##############################################################
 # Install scripts to set embree paths
@@ -135,7 +124,7 @@ SET(CPACK_PACKAGE_NAME "Embree Ray Tracing Kernels")
 SET(CPACK_PACKAGE_FILE_NAME "embree-${EMBREE_VERSION}")
 #SET(CPACK_PACKAGE_ICON ${PROJECT_SOURCE_DIR}/embree-doc/images/icon.png)
 #SET(CPACK_PACKAGE_RELOCATABLE TRUE)
-SET(CPACK_STRIP_FILES FALSE) # we strip already as a post_build step
+SET(CPACK_STRIP_FILES TRUE)
 
 SET(CPACK_PACKAGE_VERSION_MAJOR ${EMBREE_VERSION_MAJOR})
 SET(CPACK_PACKAGE_VERSION_MINOR ${EMBREE_VERSION_MINOR})
@@ -217,11 +206,11 @@ ELSEIF(APPLE)
       ADD_TEST(NAME "BuildPackage" WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} COMMAND ${PROJECT_SOURCE_DIR}/scripts/package_macosx.sh ${CMAKE_BUILD_TYPE} ${CPACK_PACKAGE_FILE_NAME}.pkg ${EMBREE_SIGN_FILE})
     ENDIF()
   ELSE()
-    SET(CPACK_GENERATOR TGZ)
+    SET(CPACK_GENERATOR ZIP)
     SET(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}.x86_64.macosx")
     SET(CPACK_MONOLITHIC_INSTALL 1)
     IF (EMBREE_TESTING_PACKAGE)
-      ADD_TEST(NAME "BuildPackage" WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} COMMAND ${PROJECT_SOURCE_DIR}/scripts/package_macosx.sh ${CMAKE_BUILD_TYPE} ${CPACK_PACKAGE_FILE_NAME}.tgz ${EMBREE_SIGN_FILE})
+      ADD_TEST(NAME "BuildPackage" WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} COMMAND ${PROJECT_SOURCE_DIR}/scripts/package_macosx.sh ${CMAKE_BUILD_TYPE} ${CPACK_PACKAGE_FILE_NAME}.zip ${EMBREE_SIGN_FILE})
     ENDIF()
   ENDIF()
 

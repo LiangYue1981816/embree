@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #include "geometry_creation.h"
 
@@ -82,7 +69,7 @@ namespace embree
   {
     Ref<SceneGraph::GridMeshNode> mesh = new SceneGraph::GridMeshNode(material,BBox1f(0,1),1);
     mesh->positions[0].resize((width+1)*(height+1));
-    mesh->grids.push_back(SceneGraph::GridMeshNode::Grid(0,width+1,width+1,height+1));
+    mesh->grids.push_back(SceneGraph::GridMeshNode::Grid(0,(unsigned)width+1,(unsigned)width+1,(unsigned)height+1));
 
     for (size_t y=0; y<=height; y++) {
       for (size_t x=0; x<=width; x++) {
@@ -256,7 +243,7 @@ namespace embree
 
     for (size_t i=0; i<6; i++)
     {
-      mesh->grids.push_back(SceneGraph::GridMeshNode::Grid(i*grid_size,N+1,N+1,N+1));
+      mesh->grids.push_back(SceneGraph::GridMeshNode::Grid(unsigned(i*grid_size),unsigned(N+1),unsigned(N+1),unsigned(N+1)));
       Vec3fa p0, dx, dy;
       switch (i) {
       case 0: p0 = Vec3fa(-0.5f,-0.5f,-0.5f); dx = Vec3fa(+1,0, 0); dy = Vec3fa(0,1,0); break;
@@ -356,6 +343,18 @@ namespace embree
     mesh->positions[0].push_back(Vec3fa(center+Vec3fa(0,0,0),radius));
     mesh->positions[0].push_back(Vec3fa(center+Vec3fa(0,0,0),radius));
     mesh->positions[0].push_back(Vec3fa(center+Vec3fa(+radius,0,0),radius));
+    return mesh.dynamicCast<SceneGraph::Node>();
+  }
+
+  Ref<SceneGraph::Node> SceneGraph::createSphere (const Vec3fa& center, const float radius, Ref<MaterialNode> material)
+  {
+    RTCGeometryType type = RTC_GEOMETRY_TYPE_SPHERE_POINT;
+    Ref<SceneGraph::PointSetNode> mesh = new SceneGraph::PointSetNode(type, material, BBox1f(0,1), 1);
+    mesh->positions[0].resize(1);
+    mesh->positions[0][0].x = center.x;
+    mesh->positions[0][0].y = center.y;
+    mesh->positions[0][0].z = center.z;
+    mesh->positions[0][0].w = radius;
     return mesh.dynamicCast<SceneGraph::Node>();
   }
 

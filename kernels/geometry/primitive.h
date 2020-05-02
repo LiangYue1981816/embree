@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -42,16 +29,21 @@ namespace embree
   template<typename Primitive>
   struct PrimitivePointQuery1
   {
-    static __forceinline void pointQuery(PointQuery* query, PointQueryContext* context, const Primitive& prim)
+    static __forceinline bool pointQuery(PointQuery* query, PointQueryContext* context, const Primitive& prim)
     {
+      bool changed = false;
       for (size_t i = 0; i < Primitive::max_size(); i++)
       {
         if (!prim.valid(i)) break;
+        STAT3(point_query.trav_prims,1,1,1);
         AccelSet* accel = (AccelSet*)context->scene->get(prim.geomID(i));
         context->geomID = prim.geomID(i);
         context->primID = prim.primID(i);
-        accel->pointQuery(query, context);
+        changed |= accel->pointQuery(query, context);
       }
+      return changed;
     }
+    
+    static __forceinline void pointQueryNoop(PointQuery* query, PointQueryContext* context, const Primitive& prim) { }
   };
 }

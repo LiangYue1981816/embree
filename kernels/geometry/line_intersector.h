@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -73,7 +60,7 @@ namespace embree
           const vfloat<M> d2 = madd(p.x,p.x,p.y*p.y);
           const vfloat<M> r = p.w;
           const vfloat<M> r2 = r*r;
-          valid &= (d2 <= r2) & (vfloat<M>(ray.tnear()) < t) & (t <= vfloat<M>(ray.tfar));
+          valid &= (d2 <= r2) & (vfloat<M>(ray.tnear()) <= t) & (t <= vfloat<M>(ray.tfar));
           if (EMBREE_CURVE_SELF_INTERSECTION_AVOIDANCE_FACTOR != 0.0f) 
             valid &= t > float(EMBREE_CURVE_SELF_INTERSECTION_AVOIDANCE_FACTOR)*r*depth_scale; // ignore self intersections
           if (unlikely(none(valid))) return false;
@@ -120,7 +107,7 @@ namespace embree
           const vfloat<M> d2 = madd(p.x,p.x,p.y*p.y);
           const vfloat<M> r = p.w;
           const vfloat<M> r2 = r*r;
-          valid &= (d2 <= r2) & (vfloat<M>(ray.tnear()[k]) < t) & (t <= vfloat<M>(ray.tfar[k]));
+          valid &= (d2 <= r2) & (vfloat<M>(ray.tnear()[k]) <= t) & (t <= vfloat<M>(ray.tfar[k]));
           if (EMBREE_CURVE_SELF_INTERSECTION_AVOIDANCE_FACTOR != 0.0f) 
             valid &= t > float(EMBREE_CURVE_SELF_INTERSECTION_AVOIDANCE_FACTOR)*r*depth_scale; // ignore self intersections
           if (unlikely(none(valid))) return false;

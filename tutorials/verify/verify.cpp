@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #define _CRT_SECURE_NO_WARNINGS
 
@@ -22,6 +9,8 @@
 #include "../common/math/closest_point.h"
 #include "../../common/algorithms/parallel_for.h"
 #include "../../kernels/common/context.h"
+#include "../../kernels/common/geometry.h"
+#include "../../kernels/common/scene.h"
 #include <regex>
 #include <stack>
 
@@ -294,11 +283,11 @@ namespace embree
 
         RTCGeometry geom = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_INSTANCE);
         rtcSetGeometryInstancedScene(geom, exemplar);
-        rtcSetGeometryTimeStepCount(geom, mesh->spaces.size());
+        rtcSetGeometryTimeStepCount(geom, (unsigned) mesh->spaces.size());
         for (size_t i = 0; i < mesh->spaces.size(); ++i)
         {
           rtcSetGeometryTransform(geom,
-                                  i,
+                                  (unsigned)i,
                                   RTC_FORMAT_FLOAT4X4_COLUMN_MAJOR,
                                   reinterpret_cast<float*>(&mesh->spaces[i]));
         }
@@ -1024,6 +1013,36 @@ namespace embree
       
       return VerifyApplication::PASSED;
     }
+  };
+
+  /////////////////////////////////////////////////////////////////////////////////
+
+  /*
+   * Test that types can be instantiated.
+   */
+  struct TypesTest : public VerifyApplication::Test
+  {
+    TypesTest(std::string name, int isa)
+      : VerifyApplication::Test(name,isa,VerifyApplication::TEST_SHOULD_PASS)
+    {}
+
+    VerifyApplication::TestReturnValue run(VerifyApplication* state, bool silent)
+    {
+      return VerifyApplication::PASSED;
+    }
+
+    BBox<Vec2<int>> bbv2i;
+    BBox<Vec3<int>> bbv3i;
+    BBox<Vec4<int>> bbv4i;
+    BBox<Vec2<unsigned int>> bbv2u;
+    BBox<Vec3<unsigned int>> bbv3u;
+    BBox<Vec4<unsigned int>> bbv4u;
+    BBox<Vec2<float>> bbv2f;
+    BBox<Vec3<float>> bbv3f;
+    BBox<Vec4<float>> bbv4f;
+    BBox<Vec2<double>> bbv2d;
+    BBox<Vec3<double>> bbv3d;
+    BBox<Vec4<double>> bbv4d;
   };
 
   /////////////////////////////////////////////////////////////////////////////////
@@ -3209,57 +3228,260 @@ namespace embree
   /////////////////////////////////////////////////////////////////////////////////
   /////////////////////////////////////////////////////////////////////////////////
   
-  struct PointQueryInstanceStackTest : public VerifyApplication::Test
+  struct PointQueryAPICallsTest : public VerifyApplication::Test
   {
-    PointQueryInstanceStackTest (std::string name, int isa)
-      : VerifyApplication::Test(name,isa,VerifyApplication::TEST_SHOULD_PASS) {}
+    SceneFlags sflags; 
 
-    VerifyApplication::TestReturnValue run(VerifyApplication* state, bool silent)
+    PointQueryAPICallsTest (std::string name, int isa, SceneFlags sflags)
+      : VerifyApplication::Test(name,isa,VerifyApplication::TEST_SHOULD_PASS), sflags(sflags) {}
+
+    VerifyApplication::TestReturnValue run(VerifyApplication *state, bool silent)
     {
-      // This test assures that we can properly cast RTCPointQueryInstanceStack
-      // to PointQueryInstanceStack and vice versa
+      // This test assures that the expected internal point query calls are made
+      // for supported primitive/geometry types
+      
+      std::string cfg = state->rtcore + ",isa=" + stringOfISA(isa);
+
+      auto queryFunc = [](RTCPointQueryFunctionArguments* args) -> bool
       {
-        PointQueryInstanceStack stack;
-        stack.instI2W[0] = AffineSpace3fa::rotate(Vec3f(1.f, 1.f, 1.f), M_PI/2.f);
-        float* raw = (float*)&(stack.instI2W[0]);
+        assert(args->userPtr);
+        //printf("query callback called for geomID %u and primID %u\n", args->geomID, args->primID);
+        uint32_t *numCalls = (uint32_t*)args->userPtr;
+        (*numCalls)++;
+        return false;
+      };
+      RTCPointQuery query;
+      query.x = query.y = query.z = query.time = 0.f;
+      query.radius = inf;
 
-        RTCPointQueryInstanceStack* rtcStack = (RTCPointQueryInstanceStack*)&stack;
-        float* rtc_raw = &(rtcStack->inst2world[0][0]);
+      RTCDeviceRef device = rtcNewDevice(cfg.c_str());
+      errorHandler(nullptr, rtcGetDeviceError(device));
+      
+      // triangle mesh
+      if (1) {
+        RTCSceneRef scene = rtcNewScene(device);
+        rtcSetSceneFlags(scene, sflags.sflags);
+        rtcSetSceneBuildQuality(scene, sflags.qflags);
 
-        if(raw != rtc_raw)                                        return VerifyApplication::FAILED;
-        if((void*)&stack != (void*)rtcStack)                      return VerifyApplication::FAILED;
-        if(rtcStack->inst2world[0][0] != stack.instI2W[0].l.vx.x) return VerifyApplication::FAILED;
-        if(rtcStack->inst2world[0][1] != stack.instI2W[0].l.vx.y) return VerifyApplication::FAILED;
-        if(rtcStack->inst2world[0][2] != stack.instI2W[0].l.vx.z) return VerifyApplication::FAILED;
-        if(rtcStack->inst2world[0][4] != stack.instI2W[0].l.vy.x) return VerifyApplication::FAILED;
-        if(rtcStack->inst2world[0][5] != stack.instI2W[0].l.vy.y) return VerifyApplication::FAILED;
-        if(rtcStack->inst2world[0][6] != stack.instI2W[0].l.vy.z) return VerifyApplication::FAILED;
+        RTCGeometry geom = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_TRIANGLE);
+        rtcSetGeometryBuildQuality(geom, sflags.qflags);
+
+        Vec3f *vertices = (Vec3f *)rtcSetNewGeometryBuffer(geom, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3, sizeof(Vec3f), 3);
+        Triangle *triangles = (Triangle *)rtcSetNewGeometryBuffer(geom, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3, sizeof(Triangle), 1);
+        vertices[0] = Vec3f(-1.0f, 0.0f, -1.0f);
+        vertices[1] = Vec3f(+1.0f, 0.0f, -1.0f);
+        vertices[2] = Vec3f(+0.0f, 0.0f, +1.0f);
+        triangles[0] = Triangle(0, 1, 2);
+
+        rtcCommitGeometry(geom);
+        rtcAttachGeometry(scene, geom);
+        rtcReleaseGeometry(geom);
+        rtcCommitScene(scene);
+        AssertNoError(device);
+
+        RTCPointQueryContext context;
+        rtcInitPointQueryContext(&context);
+        uint32_t numCalls = 0;
+        rtcPointQuery(scene, &query, &context, queryFunc, (void*)&numCalls);
+        if (numCalls != 1)
+          return VerifyApplication::FAILED;
+        AssertNoError(device);
       }
       
-      {
-        RTCPointQueryInstanceStack rtcStack;
-        rtcInitPointQueryInstanceStack(&rtcStack);
-        for (int i = 0; i < RTC_MAX_INSTANCE_LEVEL_COUNT; ++i) {
-          rtcStack.instID[i] = i;
-          for (int k = 0; k < 16; ++k)
-          {
-            rtcStack.inst2world[i][k] = i * 16 + k;
-            rtcStack.world2inst[i][k] = -(i * 16 + k);
-          }
-        }
+      // flat linear curve
+      if (1) {
+        RTCSceneRef scene = rtcNewScene(device);
+        rtcSetSceneFlags(scene, sflags.sflags);
+        rtcSetSceneBuildQuality(scene, sflags.qflags);
 
-        PointQueryInstanceStack* stack = (PointQueryInstanceStack*)&rtcStack;
-        if((void*)stack != (void*)&rtcStack) return VerifyApplication::FAILED;
-        for (int i = 0; i < RTC_MAX_INSTANCE_LEVEL_COUNT; ++i) {
-          if (stack->instID[i] != i) return VerifyApplication::FAILED;
-          float* i2w = (float*)&stack->instI2W[i];
-          float* w2i = (float*)&stack->instW2I[i];
-          for (int k = 0; k < 16; ++k)
-          {
-            if (i2w[k] != i * 16 + k)    return VerifyApplication::FAILED;
-            if (w2i[k] != -(i * 16 + k)) return VerifyApplication::FAILED;
-          }
+        RTCGeometry geom = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_FLAT_LINEAR_CURVE);
+        rtcSetGeometryBuildQuality(geom, sflags.qflags);
+
+        Vec4f *vertices = (Vec4f *)rtcSetNewGeometryBuffer(geom, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT4, sizeof(Vec4f), 3);
+        uint32_t *indices = (uint32_t*)rtcSetNewGeometryBuffer(geom, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT, sizeof(uint32_t), 2);
+        vertices[0] = Vec4f(-1.0f, 0.0f, 0.0f, 0.1f);
+        vertices[1] = Vec4f(+0.0f, 0.0f, 0.0f, 0.1f);
+        vertices[2] = Vec4f(+1.0f, 0.0f, 0.0f, 0.1f);
+        indices[0] = 0;
+        indices[1] = 1;
+
+        rtcCommitGeometry(geom);
+        rtcAttachGeometry(scene, geom);
+        rtcReleaseGeometry(geom);
+        rtcCommitScene(scene);
+        AssertNoError(device);
+
+        RTCPointQueryContext context;
+        rtcInitPointQueryContext(&context);
+        uint32_t numCalls = 0;
+        rtcPointQuery(scene, &query, &context, queryFunc, (void*)&numCalls);
+        if (numCalls != 0)
+        {
+          return VerifyApplication::FAILED;
         }
+        AssertNoError(device);
+      }
+      
+      // flat bezier curve
+      if (1) {
+        RTCSceneRef scene = rtcNewScene(device);
+        rtcSetSceneFlags(scene, sflags.sflags);
+        rtcSetSceneBuildQuality(scene, sflags.qflags);
+
+        RTCGeometry geom = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_FLAT_BEZIER_CURVE);
+        rtcSetGeometryBuildQuality(geom, sflags.qflags);
+
+        Vec4f *vertices = (Vec4f *)rtcSetNewGeometryBuffer(geom, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT4, sizeof(Vec4f), 4);
+        uint32_t *indices = (uint32_t*)rtcSetNewGeometryBuffer(geom, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT, sizeof(uint32_t), 1);
+        vertices[0] = Vec4f(-1.0f, 0.0f, 0.0f, 0.1f);
+        vertices[1] = Vec4f(-1.0f, 0.0f, 1.0f, 0.1f);
+        vertices[2] = Vec4f(+1.0f, 0.0f, 1.0f, 0.1f);
+        vertices[3] = Vec4f(+1.0f, 0.0f, 0.0f, 0.1f);
+        indices[0] = 0;
+
+        rtcCommitGeometry(geom);
+        rtcAttachGeometry(scene, geom);
+        rtcReleaseGeometry(geom);
+        rtcCommitScene(scene);
+        AssertNoError(device);
+
+        RTCPointQueryContext context;
+        rtcInitPointQueryContext(&context);
+        uint32_t numCalls = 0;
+        rtcPointQuery(scene, &query, &context, queryFunc, (void*)&numCalls);
+        if (numCalls != 0)
+        {
+          return VerifyApplication::FAILED;
+        }
+        AssertNoError(device);
+      }
+      
+      // grid geometry
+      if (1) {
+        RTCSceneRef scene = rtcNewScene(device);
+        rtcSetSceneFlags(scene, sflags.sflags);
+        rtcSetSceneBuildQuality(scene, sflags.qflags);
+
+        RTCGeometry geom = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_GRID);
+        rtcSetGeometryBuildQuality(geom, sflags.qflags);
+
+        RTCGrid* grid = (RTCGrid*)rtcSetNewGeometryBuffer(geom, RTC_BUFFER_TYPE_GRID, 0, RTC_FORMAT_GRID, sizeof(RTCGrid), 2);
+        grid[0].startVertexID = 0;
+        grid[0].stride        = 3;
+        grid[0].width         = 3;
+        grid[0].height        = 3;
+        grid[1].startVertexID = 9;
+        grid[1].stride        = 2;
+        grid[1].width         = 2;
+        grid[1].height        = 2;
+
+        /* set vertices */
+        Vec3f* vertices = (Vec3f*) rtcSetNewGeometryBuffer(geom,RTC_BUFFER_TYPE_VERTEX,0,RTC_FORMAT_FLOAT3,sizeof(Vec3f),13);
+        for (int j = 0; j < 3; ++j)
+        for (int i = 0; i < 3; ++i)
+        {
+          vertices[j * 3 + i] = Vec3f(float(i), (j == 1) ? 0.5f : 1.f, 2.f-float(j));
+        }
+        vertices[ 9] = Vec3f(0.f, 2.f, 1.f);
+        vertices[10] = Vec3f(1.f, 2.f, 1.f);
+        vertices[11] = Vec3f(1.f, 2.f, 0.f);
+        vertices[12] = Vec3f(0.f, 2.f, 0.f);
+
+        rtcCommitGeometry(geom);
+        rtcAttachGeometry(scene, geom);
+        rtcReleaseGeometry(geom);
+        rtcCommitScene(scene);
+        AssertNoError(device);
+
+        RTCPointQueryContext context;
+        rtcInitPointQueryContext(&context);
+        uint32_t numCalls = 0;
+        rtcPointQuery(scene, &query, &context, queryFunc, (void*)&numCalls);
+        if (numCalls != 2)
+        {
+          return VerifyApplication::FAILED;
+        }
+        AssertNoError(device);
+      }
+
+      // user geometry
+      if (1) {
+        RTCSceneRef scene = rtcNewScene(device);
+        rtcSetSceneFlags(scene, sflags.sflags);
+        rtcSetSceneBuildQuality(scene, sflags.qflags);
+
+        auto boundsFunc = [](const struct RTCBoundsFunctionArguments* args)
+        {
+          const Vec4f* spheres = (const Vec4f*) args->geometryUserPtr;
+          RTCBounds* bounds_o = args->bounds_o;
+          const Vec4f& sphere = spheres[args->primID];
+          bounds_o->lower_x = sphere.x-sphere.w;
+          bounds_o->lower_y = sphere.y-sphere.w;
+          bounds_o->lower_z = sphere.z-sphere.w;
+          bounds_o->upper_x = sphere.x+sphere.w;
+          bounds_o->upper_y = sphere.y+sphere.w;
+          bounds_o->upper_z = sphere.z+sphere.w;
+        };
+        auto intersectFunc = [](const RTCIntersectFunctionNArguments* args) {};
+        auto occludedFunc  = [](const RTCOccludedFunctionNArguments* args)  {};
+        
+        RTCGeometry geom = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_USER);
+        rtcSetGeometryBuildQuality(geom, sflags.qflags);
+
+        Vec4f* spheres = (Vec4f*) alignedMalloc(2*sizeof(Vec4f),16);
+        spheres[0] = Vec4f(0.f, 0.f, 0.f, 1.f);
+        spheres[1] = Vec4f(2.f, 0.f, 0.f, 1.f);
+        rtcSetGeometryUserPrimitiveCount(geom, 2);
+        rtcSetGeometryUserData(geom, spheres);
+        rtcSetGeometryBoundsFunction(geom, boundsFunc, nullptr);
+        rtcSetGeometryIntersectFunction(geom, intersectFunc);
+        rtcSetGeometryOccludedFunction (geom, occludedFunc);
+        rtcCommitGeometry(geom);
+        rtcAttachGeometry(scene, geom);
+        rtcReleaseGeometry(geom);
+        rtcCommitScene(scene);
+        AssertNoError(device);
+
+        RTCPointQueryContext context;
+        rtcInitPointQueryContext(&context);
+        uint32_t numCalls = 0;
+        rtcPointQuery(scene, &query, &context, queryFunc, (void*)&numCalls);
+        if (numCalls != 2)
+        {
+          return VerifyApplication::FAILED;
+        }
+        AssertNoError(device);
+        alignedFree(spheres);
+      }
+      
+      // point geometry
+      if (1) {
+        RTCSceneRef scene = rtcNewScene(device);
+        rtcSetSceneFlags(scene, sflags.sflags);
+        rtcSetSceneBuildQuality(scene, sflags.qflags);
+
+        RTCGeometry geom = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_SPHERE_POINT);
+        rtcSetGeometryBuildQuality(geom, sflags.qflags);
+
+        Vec4f* vertices = (Vec4f*) rtcSetNewGeometryBuffer(geom, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT4, sizeof(Vec4f), 10);
+        for (int i = 0; i < 10; ++i)
+          vertices[i] = Vec4f((float)i, 0.f, 0.f, 0.1f);
+
+        rtcCommitGeometry(geom);
+        rtcAttachGeometry(scene, geom);
+        rtcReleaseGeometry(geom);
+        rtcCommitScene(scene);
+        AssertNoError(device);
+
+        RTCPointQueryContext context;
+        rtcInitPointQueryContext(&context);
+        uint32_t numCalls = 0;
+        rtcPointQuery(scene, &query, &context, queryFunc, (void*)&numCalls);
+        if (numCalls != 0)
+        {
+          return VerifyApplication::FAILED;
+        }
+        AssertNoError(device);
       }
 
       return VerifyApplication::PASSED;
@@ -3292,9 +3514,9 @@ namespace embree
       Triangle* triangles = (Triangle*)rtcSetNewGeometryBuffer(geom, RTC_BUFFER_TYPE_INDEX , 0, RTC_FORMAT_UINT3, sizeof(Triangle), 32);
       for (int i = 0; i < 32; ++i) {
         float xi = random_float();
-        vertices[3*i+0] = Vec3f(0.0f,          0.0f,          i);
-        vertices[3*i+1] = Vec3f(1.0f + 5.f*xi, 0.0f,          i);
-        vertices[3*i+2] = Vec3f(0.0f,          1.0f + 5.f*xi, i);
+        vertices[3*i+0] = Vec3f(0.0f,          0.0f,          (float)i);
+        vertices[3*i+1] = Vec3f(1.0f + 5.f*xi, 0.0f,          (float)i);
+        vertices[3*i+2] = Vec3f(0.0f,          1.0f + 5.f*xi, (float)i);
         triangles[i] = Triangle(3*i+0, 3*i+1, 3*i+2);
       };
 
@@ -3325,9 +3547,9 @@ namespace embree
         data.vertices  = vertices;
         data.triangles = triangles;
 
-        RTCPointQueryInstanceStack instStack;
-        rtcInitPointQueryInstanceStack(&instStack);
-        rtcPointQuery(scene, &query, &instStack, [](RTCPointQueryFunctionArguments* args) -> bool
+        RTCPointQueryContext context;
+        rtcInitPointQueryContext(&context);
+        rtcPointQuery(scene, &query, &context, [](RTCPointQueryFunctionArguments* args) -> bool
         {
           UserData* data = (UserData*)args->userPtr;
           // get triangle info
@@ -3438,23 +3660,23 @@ namespace embree
       query0.time = query1.time = query2.time = 0.f;
       {
         unsigned int primID = RTC_INVALID_GEOMETRY_ID;
-        RTCPointQueryInstanceStack instStack;
-        rtcInitPointQueryInstanceStack(&instStack);
-        rtcPointQuery(scene, &query0, &instStack, nullptr, &primID);
+        RTCPointQueryContext context;
+        rtcInitPointQueryContext(&context);
+        rtcPointQuery(scene, &query0, &context, nullptr, &primID);
         if (primID == RTC_INVALID_GEOMETRY_ID) return VerifyApplication::FAILED;
       }
       {
         unsigned int primID = RTC_INVALID_GEOMETRY_ID;
-        RTCPointQueryInstanceStack instStack;
-        rtcInitPointQueryInstanceStack(&instStack);
-        rtcPointQuery(scene, &query1, &instStack, nullptr, &primID);
+        RTCPointQueryContext context;
+        rtcInitPointQueryContext(&context);
+        rtcPointQuery(scene, &query1, &context, nullptr, &primID);
         if (primID != RTC_INVALID_GEOMETRY_ID) return VerifyApplication::FAILED;
       }
       {
         unsigned int primID = RTC_INVALID_GEOMETRY_ID;
-        RTCPointQueryInstanceStack instStack;
-        rtcInitPointQueryInstanceStack(&instStack);
-        rtcPointQuery(scene, &query2, &instStack, nullptr, &primID);
+        RTCPointQueryContext context;
+        rtcInitPointQueryContext(&context);
+        rtcPointQuery(scene, &query2, &context, nullptr, &primID);
         if (primID != RTC_INVALID_GEOMETRY_ID) return VerifyApplication::FAILED;
       }
 
@@ -3462,23 +3684,23 @@ namespace embree
       query0.time = query1.time = query2.time = 0.5f;
       {
         unsigned int primID = RTC_INVALID_GEOMETRY_ID;
-        RTCPointQueryInstanceStack instStack;
-        rtcInitPointQueryInstanceStack(&instStack);
-        rtcPointQuery(scene, &query0, &instStack, nullptr, &primID);
+        RTCPointQueryContext context;
+        rtcInitPointQueryContext(&context);
+        rtcPointQuery(scene, &query0, &context, nullptr, &primID);
         if (primID != RTC_INVALID_GEOMETRY_ID) return VerifyApplication::FAILED;
       }
       {
         unsigned int primID = RTC_INVALID_GEOMETRY_ID;
-        RTCPointQueryInstanceStack instStack;
-        rtcInitPointQueryInstanceStack(&instStack);
-        rtcPointQuery(scene, &query1, &instStack, nullptr, &primID);
+        RTCPointQueryContext context;
+        rtcInitPointQueryContext(&context);
+        rtcPointQuery(scene, &query1, &context, nullptr, &primID);
         if (primID == RTC_INVALID_GEOMETRY_ID) return VerifyApplication::FAILED;
       }
       {
         unsigned int primID = RTC_INVALID_GEOMETRY_ID;
-        RTCPointQueryInstanceStack instStack;
-        rtcInitPointQueryInstanceStack(&instStack);
-        rtcPointQuery(scene, &query2, &instStack, nullptr, &primID);
+        RTCPointQueryContext context;
+        rtcInitPointQueryContext(&context);
+        rtcPointQuery(scene, &query2, &context, nullptr, &primID);
         if (primID != RTC_INVALID_GEOMETRY_ID) return VerifyApplication::FAILED;
       }
       
@@ -3486,23 +3708,23 @@ namespace embree
       query0.time = query1.time = query2.time = 1.f;
       {
         unsigned int primID = RTC_INVALID_GEOMETRY_ID;
-        RTCPointQueryInstanceStack instStack;
-        rtcInitPointQueryInstanceStack(&instStack);
-        rtcPointQuery(scene, &query0, &instStack, nullptr, &primID);
+        RTCPointQueryContext context;
+        rtcInitPointQueryContext(&context);
+        rtcPointQuery(scene, &query0, &context, nullptr, &primID);
         if (primID != RTC_INVALID_GEOMETRY_ID) return VerifyApplication::FAILED;
       }
       {
         unsigned int primID = RTC_INVALID_GEOMETRY_ID;
-        RTCPointQueryInstanceStack instStack;
-        rtcInitPointQueryInstanceStack(&instStack);
-        rtcPointQuery(scene, &query1, &instStack, nullptr, &primID);
+        RTCPointQueryContext context;
+        rtcInitPointQueryContext(&context);
+        rtcPointQuery(scene, &query1, &context, nullptr, &primID);
         if (primID != RTC_INVALID_GEOMETRY_ID) return VerifyApplication::FAILED;
       }
       {
         unsigned int primID = RTC_INVALID_GEOMETRY_ID;
-        RTCPointQueryInstanceStack instStack;
-        rtcInitPointQueryInstanceStack(&instStack);
-        rtcPointQuery(scene, &query2, &instStack, nullptr, &primID);
+        RTCPointQueryContext context;
+        rtcInitPointQueryContext(&context);
+        rtcPointQuery(scene, &query2, &context, nullptr, &primID);
         if (primID == RTC_INVALID_GEOMETRY_ID) return VerifyApplication::FAILED;
       }
 
@@ -3510,6 +3732,264 @@ namespace embree
     }
   };
 
+  struct GeometryStateTest : public VerifyApplication::Test
+  {
+    GeometryStateTest (std::string name, int isa)
+      : VerifyApplication::Test (name, isa, VerifyApplication::TEST_SHOULD_PASS) {}
+    
+    VerifyApplication::TestReturnValue run (VerifyApplication* state, bool silent)
+    {
+      std::string cfg = state->rtcore + ",isa=" + stringOfISA(isa);
+      RTCDeviceRef device = rtcNewDevice(cfg.c_str());
+      errorHandler (nullptr, rtcGetDeviceError(device));
+      AssertNoError(device);
+      RTCGeometry geom0 = rtcNewGeometry (device, RTC_GEOMETRY_TYPE_TRIANGLE);
+      AssertNoError(device);
+      using embree::Geometry;
+      auto geometry = (Geometry *) geom0;
+
+      // test construction
+      if (geometry->state != (unsigned)Geometry::State::MODIFIED) {
+        return VerifyApplication::FAILED;
+      }
+
+      //test update
+      geometry->state = (unsigned)Geometry::State::COMMITTED;
+      geometry->update();
+      if (geometry->state != (unsigned)Geometry::State::MODIFIED) {
+        return VerifyApplication::FAILED;
+      }
+
+      //test commit
+      geometry->state = (unsigned)Geometry::State::MODIFIED;
+      geometry->commit();
+      if (geometry->state != (unsigned)Geometry::State::COMMITTED) {
+        return VerifyApplication::FAILED;
+      }
+
+      // test disable
+      geometry->enabled = false;
+      geometry->disable ();
+      if (geometry->isEnabled ()) {
+        return VerifyApplication::FAILED;
+      }
+
+      geometry->enabled = true;
+      geometry->disable ();
+      if (geometry->isEnabled ()) {
+        return VerifyApplication::FAILED;
+      }
+
+      // test enable
+      geometry->enabled = true;
+      geometry->enable ();
+      if (!geometry->isEnabled ()) {
+        return VerifyApplication::FAILED;
+      }
+
+      geometry->enabled = false;
+      geometry->enable ();
+      if (!geometry->isEnabled ()) {
+        return VerifyApplication::FAILED;
+      }
+
+      rtcReleaseGeometry(geom0);
+      AssertNoError(device);
+
+      return VerifyApplication::PASSED;
+    }
+  };
+
+  struct SceneCheckModifiedGeometryTest : public VerifyApplication::Test
+  {
+	  struct TestScene : public Scene {
+
+		  __forceinline void setGeomCounter(size_t geomID, unsigned int count) {
+			  geometryModCounters_[geomID] = count;
+		  }
+
+		  __forceinline unsigned int getGeomCount(size_t geomID) {
+			  return geometryModCounters_[geomID];
+		  }
+			 
+		  __forceinline void checkIfModifiedAndSet() {
+			  return Scene::checkIfModifiedAndSet();
+		  }
+	  };
+
+	  SceneCheckModifiedGeometryTest (std::string name, int isa) 
+		: VerifyApplication::Test(name, isa, VerifyApplication::TEST_SHOULD_PASS)
+	  {}
+
+	  VerifyApplication::TestReturnValue run(VerifyApplication* state, bool silent)
+	  {
+		  std::string cfg = state->rtcore + ",isa=" + stringOfISA(isa);
+		  RTCDeviceRef device = rtcNewDevice(cfg.c_str());
+		  errorHandler(nullptr, rtcGetDeviceError(device));
+
+		  RTCSceneRef scene = rtcNewScene(device);
+		  AssertNoError(device);
+
+		  RTCGeometry geom0 = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_TRIANGLE);
+		  AssertNoError(device);
+		  RTCGeometry geom1 = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_TRIANGLE);
+		  AssertNoError(device);
+		  RTCGeometry geom2 = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_TRIANGLE);
+		  AssertNoError(device);
+		  RTCGeometry geom3 = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_TRIANGLE);
+		  AssertNoError(device);
+
+		  rtcAttachGeometry(scene, geom0);
+		  rtcAttachGeometry(scene, geom1);
+		  rtcAttachGeometry(scene, geom2);
+		  rtcAttachGeometry(scene, geom3);
+
+		  auto scene0 = (TestScene*)scene.scene;
+		  auto geometry0 = (Geometry*) geom0;
+		  auto geometry1 = (Geometry*) geom1;
+		  auto geometry2 = (Geometry*) geom2;
+		  auto geometry3 = (Geometry*) geom3;
+
+		  for (size_t geomID = 0; geomID < 4; ++geomID) {
+			  scene0->setGeomCounter(geomID, 1);
+		  }
+
+		  scene0->setModified();
+		  scene0->checkIfModifiedAndSet();
+		  if (!scene0->isModified()) {
+			  return VerifyApplication::FAILED;
+		  }
+
+		  scene0->setModified(false);
+		  geometry0->enable();
+		  geometry1->enable();
+		  geometry2->enable();
+		  geometry3->enable();
+		  scene0->checkIfModifiedAndSet();
+		  if (scene0->isModified()) {
+			  return VerifyApplication::FAILED;
+		  }
+
+		  geometry2->modCounter_ += 2;
+			
+		  scene0->checkIfModifiedAndSet();
+		  if (!scene0->isModified()) {
+			  return VerifyApplication::FAILED;
+		  }
+
+		  rtcReleaseGeometry(geom0);
+		  AssertNoError(device);
+		  rtcReleaseGeometry(geom1);
+		  AssertNoError(device);
+		  rtcReleaseGeometry(geom2);
+		  AssertNoError(device);
+		  rtcReleaseGeometry(geom3);
+		  AssertNoError(device);
+
+		  return VerifyApplication::PASSED;
+	  }
+  };
+
+  struct SphereFilterMultiHitTest : public VerifyApplication::Test
+  {
+    struct IntersectContext
+    {
+      RTCIntersectContext context;
+      void* userRayExt;         
+    };
+    
+    SphereFilterMultiHitTest (std::string name, int isa) 
+      : VerifyApplication::Test(name, isa, VerifyApplication::TEST_SHOULD_PASS)
+    {}
+    
+    void createSphere(RTCDevice device, RTCScene scene, float x, float y, float z, float r)
+    {
+      RTCGeometry geom = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_SPHERE_POINT);
+      
+      float* vertices = (float*)rtcSetNewGeometryBuffer(geom, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT4, 4 * sizeof(float), 1);
+      vertices[0] = x; vertices[1] = y; vertices[2] = z; vertices[3] = r;
+      
+      rtcCommitGeometry(geom);
+      rtcAttachGeometry(scene, geom);
+      rtcReleaseGeometry(geom);
+    }
+    
+    static void countHits(const RTCFilterFunctionNArguments* args)
+    {
+      assert(args->N == 1);
+      RTCRay* ray = (RTCRay*) args->ray;
+      auto pos = embree::Vec3f(ray->org_x, ray->org_y, ray->org_z) + embree::Vec3f(ray->dir_x, ray->dir_y, ray->dir_z) * ray->tfar;
+      static_cast<std::vector<embree::Vec3f>*>(((IntersectContext*)args->context)->userRayExt)->push_back (pos);
+      args->valid[0] = 0;
+    }
+    
+    VerifyApplication::TestReturnValue run(VerifyApplication* state, bool silent)
+    {
+      RTCDeviceRef device = rtcNewDevice(nullptr);
+      RTCSceneRef scene = rtcNewScene(device);
+      rtcSetSceneFlags(scene, RTC_SCENE_FLAG_CONTEXT_FILTER_FUNCTION | RTC_SCENE_FLAG_ROBUST);
+      
+      createSphere(device, scene, 0, 0, 0, 1);
+      createSphere(device, scene, 0, 0, 3, 1);
+      
+      rtcCommitScene(scene);
+      
+      IntersectContext intersectContext;
+      std::vector<embree::Vec3f> hits;
+      intersectContext.userRayExt = &hits;
+      rtcInitIntersectContext(&(intersectContext.context));
+      intersectContext.context.filter = &countHits;
+      
+      RTCRayHit rayHit;
+      rayHit.ray.org_x = 0;
+      rayHit.ray.org_y = 0;
+      rayHit.ray.org_z = -5;
+      rayHit.ray.dir_x = 0;
+      rayHit.ray.dir_y = 0;
+      rayHit.ray.dir_z = 1;
+      rayHit.ray.tnear = 0;
+      rayHit.ray.tfar = 100000;
+      rayHit.ray.mask = 0u;
+      rayHit.ray.flags = 0u;
+      rayHit.hit.geomID = RTC_INVALID_GEOMETRY_ID;
+      rayHit.hit.instID[0] = RTC_INVALID_GEOMETRY_ID;
+      
+      rtcIntersect1(scene, &(intersectContext.context), &rayHit);
+      
+      bool cullingEnabled = rtcGetDeviceProperty(device, RTC_DEVICE_PROPERTY_BACKFACE_CULLING_ENABLED);
+      
+      if (cullingEnabled) {
+        if (hits.size() != 2) {
+          return VerifyApplication::FAILED;
+        }
+        if(std::fabs(hits[0].z + 1.f) > 1.e-6) {
+          return VerifyApplication::FAILED;
+        }
+        if(std::fabs(hits[1].z - 1.f) > 1.e-6) {
+          return VerifyApplication::FAILED;
+        }
+      } else {
+        if (hits.size() != 4) {
+          return VerifyApplication::FAILED;
+        }
+        if(std::fabs(hits[0].z + 1.f) > 1.e-6) {
+          return VerifyApplication::FAILED;
+        }
+        if(std::fabs(hits[1].z - 1.f) > 1.e-6) {
+          return VerifyApplication::FAILED;
+        }
+        if(std::fabs(hits[2].z - 2.f) > 1.e-6) {
+          return VerifyApplication::FAILED;
+        }
+        if(std::fabs(hits[3].z - 4.f) > 1.e-6) {
+          return VerifyApplication::FAILED;
+        }
+      }
+      
+      return VerifyApplication::PASSED;
+    }
+  };
+  
   /////////////////////////////////////////////////////////////////////////////////
   /////////////////////////////////////////////////////////////////////////////////
   /////////////////////////////////////////////////////////////////////////////////
@@ -4757,6 +5237,7 @@ namespace embree
       push(new TestGroup(stringOfISA(isa),false,false));
       
       groups.top()->add(new MultipleDevicesTest("multiple_devices",isa));
+      groups.top()->add(new TypesTest("types_test",isa));
 
       push(new TestGroup("get_bounds",true,true));
       for (auto gtype : gtypes_all)
@@ -5079,7 +5560,7 @@ namespace embree
 
       push(new TestGroup("point_query",true,true));
       for (auto sflags : sceneFlags) {
-        groups.top()->add(new PointQueryInstanceStackTest(to_string(sflags),isa));
+        groups.top()->add(new PointQueryAPICallsTest("point_query_api_calls",isa,sflags));
         if (stringOfISA(isa) == "SSE4.1" || stringOfISA(isa) == "SSE4.2") {
           groups.top()->add(new PointQueryTest(to_string(sflags),isa,sflags,"bvh4.triangle4v"));
           groups.top()->add(new PointQueryTest(to_string(sflags),isa,sflags,"bvh4.triangle4i"));
@@ -5113,6 +5594,15 @@ namespace embree
 
       groups.top()->add(new MemoryMonitorTest("regression_static_memory_monitor", isa,rtcore_regression_static_thread,30));
       groups.top()->add(new MemoryMonitorTest("regression_dynamic_memory_monitor",isa,rtcore_regression_dynamic_thread,30));
+
+      /**************************************************************************/
+      /*                  Function Level Testing                                */
+      /**************************************************************************/
+
+      groups.top()->add(new GeometryStateTest("geometry_state_tests", isa));
+      groups.top()->add(new SceneCheckModifiedGeometryTest("scene_modified_geometry_tests", isa));
+      groups.top()->add(new SphereFilterMultiHitTest("sphere_filter_multi_hit_tests", isa));
+
       
       /**************************************************************************/
       /*                           Benchmarks                                   */

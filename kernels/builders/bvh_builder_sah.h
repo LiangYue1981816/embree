@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -45,12 +32,12 @@ namespace embree
       {
         /*! default settings */
         Settings ()
-        : branchingFactor(2), maxDepth(32), logBlockSize(0), minLeafSize(1), maxLeafSize(8),
+        : branchingFactor(2), maxDepth(32), logBlockSize(0), minLeafSize(1), maxLeafSize(7),
           travCost(1.0f), intCost(1.0f), singleThreadThreshold(1024), primrefarrayalloc(inf) {}
 
         /*! initialize settings from API settings */
         Settings (const RTCBuildArguments& settings)
-        : branchingFactor(2), maxDepth(32), logBlockSize(0), minLeafSize(1), maxLeafSize(8),
+        : branchingFactor(2), maxDepth(32), logBlockSize(0), minLeafSize(1), maxLeafSize(7),
           travCost(1.0f), intCost(1.0f), singleThreadThreshold(1024), primrefarrayalloc(inf)
         {
           if (RTC_BUILD_ARGUMENTS_HAS(settings,maxBranchingFactor)) branchingFactor = settings.maxBranchingFactor;
@@ -60,11 +47,16 @@ namespace embree
           if (RTC_BUILD_ARGUMENTS_HAS(settings,maxLeafSize       )) maxLeafSize     = settings.maxLeafSize;
           if (RTC_BUILD_ARGUMENTS_HAS(settings,traversalCost     )) travCost        = settings.traversalCost;
           if (RTC_BUILD_ARGUMENTS_HAS(settings,intersectionCost  )) intCost         = settings.intersectionCost;
+
+          minLeafSize = min(minLeafSize,maxLeafSize);
         }
 
         Settings (size_t sahBlockSize, size_t minLeafSize, size_t maxLeafSize, float travCost, float intCost, size_t singleThreadThreshold, size_t primrefarrayalloc = inf)
         : branchingFactor(2), maxDepth(32), logBlockSize(bsr(sahBlockSize)), minLeafSize(minLeafSize), maxLeafSize(maxLeafSize),
-          travCost(travCost), intCost(intCost), singleThreadThreshold(singleThreadThreshold), primrefarrayalloc(primrefarrayalloc) {}
+          travCost(travCost), intCost(intCost), singleThreadThreshold(singleThreadThreshold), primrefarrayalloc(primrefarrayalloc)
+        {
+          minLeafSize = min(minLeafSize,maxLeafSize);
+        }
 
       public:
         size_t branchingFactor;  //!< branching factor of BVH to build

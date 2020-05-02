@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -75,7 +62,7 @@ namespace embree
         const Vec3vf<M> c0     = center - ray_org;
         const vfloat<M> projC0 = dot(c0, ray_dir) * rd2;
 
-        valid &= (vfloat<M>(ray.tnear()) < projC0) & (projC0 <= vfloat<M>(ray.tfar));
+        valid &= (vfloat<M>(ray.tnear()) <= projC0) & (projC0 <= vfloat<M>(ray.tfar));
         if (EMBREE_CURVE_SELF_INTERSECTION_AVOIDANCE_FACTOR != 0.0f)
           valid &= projC0 > float(EMBREE_CURVE_SELF_INTERSECTION_AVOIDANCE_FACTOR) * radius * pre.depth_scale;  // ignore self intersections
         if (unlikely(none(valid)))
@@ -88,7 +75,7 @@ namespace embree
         if (unlikely(none(valid)))
           return false;
 
-        SphereIntersectorHitM<M> hit(zero, zero, projC0, -ray_dir);
+        DiscIntersectorHitM<M> hit(zero, zero, projC0, -ray_dir);
         return epilog(valid, hit);
       }
 
@@ -111,7 +98,7 @@ namespace embree
 
         vfloat<M> t = dot(center - Vec3vf<M>(ray.org), Vec3vf<M>(normal)) / divisor;
 
-        valid &= (vfloat<M>(ray.tnear()) < t) & (t <= vfloat<M>(ray.tfar));
+        valid &= (vfloat<M>(ray.tnear()) <= t) & (t <= vfloat<M>(ray.tfar));
         if (unlikely(none(valid)))
           return false;
 
@@ -150,7 +137,7 @@ namespace embree
         const Vec3vf<M> c0     = center - ray_org;
         const vfloat<M> projC0 = dot(c0, ray_dir) * rd2;
 
-        valid &= (vfloat<M>(ray.tnear()[k]) < projC0) & (projC0 <= vfloat<M>(ray.tfar[k]));
+        valid &= (vfloat<M>(ray.tnear()[k]) <= projC0) & (projC0 <= vfloat<M>(ray.tfar[k]));
         if (EMBREE_CURVE_SELF_INTERSECTION_AVOIDANCE_FACTOR != 0.0f)
           valid &= projC0 > float(EMBREE_CURVE_SELF_INTERSECTION_AVOIDANCE_FACTOR) * radius * pre.depth_scale[k];  // ignore self intersections
         if (unlikely(none(valid)))
@@ -163,7 +150,7 @@ namespace embree
         if (unlikely(none(valid)))
           return false;
 
-        SphereIntersectorHitM<M> hit(zero, zero, projC0, -ray_dir);
+        DiscIntersectorHitM<M> hit(zero, zero, projC0, -ray_dir);
         return epilog(valid, hit);
       }
 
@@ -189,7 +176,7 @@ namespace embree
 
         vfloat<M> t = dot(center - Vec3vf<M>(ray_org), Vec3vf<M>(normal)) / divisor;
 
-        valid &= (vfloat<M>(ray.tnear()[k]) < t) & (t <= vfloat<M>(ray.tfar[k]));
+        valid &= (vfloat<M>(ray.tnear()[k]) <= t) & (t <= vfloat<M>(ray.tfar[k]));
         if (unlikely(none(valid)))
           return false;
 

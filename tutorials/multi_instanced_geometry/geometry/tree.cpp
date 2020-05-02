@@ -1,3 +1,6 @@
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
+
 namespace Twigs01 {
   static const float localX[] = {
     0.104629f, 0.236641f, -0.00835836f, 0.00214634f, 0.17147f, 0.0942602f,

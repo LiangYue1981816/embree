@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -59,7 +46,7 @@ namespace embree
           Vec3vf<M> D = Vec3vf<M>(ray_dir);
           vfloat<M> ON = dot(O,N);
           vfloat<M> DN = dot(D,N);
-          vboolx eps = abs(DN) < min_rcp_input;
+          vbool<M> eps = abs(DN) < min_rcp_input;
           vfloat<M> t = -ON*rcp(DN);
           vfloat<M> lower = select(eps | DN < 0.0f, vfloat<M>(neg_inf), t);
           vfloat<M> upper = select(eps | DN > 0.0f, vfloat<M>(pos_inf), t);

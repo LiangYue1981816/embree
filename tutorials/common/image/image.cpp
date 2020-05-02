@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #include "image.h"
 #include "../../../common/sys/string.h"
@@ -22,6 +9,31 @@
 
 namespace embree
 {
+  double compareImages(Ref<Image> image0, Ref<Image> image1)
+  {
+    /* compare image size */
+    const size_t width = image0->width;
+    const size_t height = image0->height;
+    if (image1->width != width) return inf;
+    if (image1->height != height) return inf;
+
+    /* compare both images */
+    double diff = 0.0;
+    for (size_t y=0; y<height; y++)
+    {
+      for (size_t x=0; x<width; x++)
+      {
+        const Color c0 = image0->get(x,y);
+        const Color c1 = image1->get(x,y);
+        diff += sqr(fabs(c0.r - c1.r))/3.0f;
+        diff += sqr(fabs(c0.g - c1.g))/3.0f;
+        diff += sqr(fabs(c0.b - c1.b))/3.0f;
+      }
+    }
+
+    return diff;
+  }
+  
   /*! loads an image from a file with auto-detection of format */
   Ref<Image> loadImageFromDisk(const FileName& fileName)
   {
@@ -47,6 +59,7 @@ namespace embree
     
     if (ext == "pfm" ) return loadPFM(fileName);
     if (ext == "ppm" ) return loadPPM(fileName);
+    if (ext == "tga" ) return loadTGA(fileName);
     THROW_RUNTIME_ERROR("image format " + ext + " not supported");
   }
 

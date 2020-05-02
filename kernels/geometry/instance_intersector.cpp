@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #include "instance_intersector.h"
 #include "../common/scene.h"
@@ -22,42 +9,45 @@ namespace embree
 {
   namespace isa
   {
+
     /* Push an instance to the stack. */
-    RTC_FORCEINLINE bool pushInstance(PointQueryContext* context, 
-                      unsigned int instanceId, 
-                      AffineSpace3fa const& w2i, 
+    RTC_FORCEINLINE bool pushInstance(RTCPointQueryContext* context,
+                      unsigned int instanceId,
+                      AffineSpace3fa const& w2i,
                       AffineSpace3fa const& i2w)
     {
-      PointQueryInstanceStack* stack = context->instStack;
-      const size_t stackSize = stack->size;
-      const bool spaceAvailable = context && stackSize < RTC_MAX_INSTANCE_LEVEL_COUNT;
-      assert(spaceAvailable); 
-      if (likely(spaceAvailable)) 
+      assert(context);
+      const size_t stackSize = context->instStackSize;
+      assert(stackSize < RTC_MAX_INSTANCE_LEVEL_COUNT); 
+      context->instID[stackSize] = instanceId;
+
+      AffineSpace3fa_store_unaligned(w2i,(AffineSpace3fa*)context->world2inst[stackSize]);
+      AffineSpace3fa_store_unaligned(i2w,(AffineSpace3fa*)context->inst2world[stackSize]);
+
+      if (unlikely(stackSize > 0))
       {
-        stack->instID[stackSize] = instanceId;
-        stack->instW2I[stackSize] = w2i;
-        stack->instI2W[stackSize] = i2w;
-        if (unlikely(stackSize > 0))
-        {
-          stack->instW2I[stackSize] = stack->instW2I[stackSize  ] * stack->instW2I[stackSize-1];
-          stack->instI2W[stackSize] = stack->instI2W[stackSize-1] * stack->instI2W[stackSize  ];
-        }
-        stack->size++;
+        const AffineSpace3fa world2inst = AffineSpace3fa_load_unaligned((AffineSpace3fa*)context->world2inst[stackSize  ]) 
+                                        * AffineSpace3fa_load_unaligned((AffineSpace3fa*)context->world2inst[stackSize-1]);
+        const AffineSpace3fa inst2world = AffineSpace3fa_load_unaligned((AffineSpace3fa*)context->inst2world[stackSize-1]) 
+                                        * AffineSpace3fa_load_unaligned((AffineSpace3fa*)context->inst2world[stackSize  ]);
+        AffineSpace3fa_store_unaligned(world2inst,(AffineSpace3fa*)context->world2inst[stackSize]);
+        AffineSpace3fa_store_unaligned(inst2world,(AffineSpace3fa*)context->inst2world[stackSize]);
       }
-      return spaceAvailable;
+      context->instStackSize++;
+      return true;
     }
 
     /* Pop the last instance pushed to the stack. Do not call on an empty stack. */
-    RTC_FORCEINLINE void popInstance(PointQueryContext* context)
+    RTC_FORCEINLINE void popInstance(RTCPointQueryContext* context)
     {
-      assert(context && context->instStack->size > 0);
-      context->instStack->instID[--context->instStack->size] = RTC_INVALID_GEOMETRY_ID;
+      assert(context && context->instStackSize > 0);
+      context->instID[--context->instStackSize] = RTC_INVALID_GEOMETRY_ID;
     }
 
     void InstanceIntersector1::intersect(const Precalculations& pre, RayHit& ray, IntersectContext* context, const InstancePrimitive& prim)
     {
       const Instance* instance = prim.instance;
-      
+
       /* perform ray mask test */
 #if defined(EMBREE_RAY_MASK)
       if ((ray.mask & instance->mask) == 0) 
@@ -65,7 +55,7 @@ namespace embree
 #endif
 
       RTCIntersectContext* user_context = context->user;
-      if (likely(instance_id_stack::push(user_context, instance->geomID)))
+      if (likely(instance_id_stack::push(user_context, prim.instID_)))
       {
         const AffineSpace3fa world2local = instance->getWorld2Local();
         const Vec3fa ray_org = ray.org;
@@ -92,7 +82,7 @@ namespace embree
       
       RTCIntersectContext* user_context = context->user;
       bool occluded = false;
-      if (likely(instance_id_stack::push(user_context, instance->geomID)))
+      if (likely(instance_id_stack::push(user_context, prim.instID_)))
       {
         const AffineSpace3fa world2local = instance->getWorld2Local();
         const Vec3fa ray_org = ray.org;
@@ -109,7 +99,7 @@ namespace embree
       return occluded;
     }
     
-    void InstanceIntersector1::pointQuery(PointQuery* query, PointQueryContext* context, const InstancePrimitive& prim)
+    bool InstanceIntersector1::pointQuery(PointQuery* query, PointQueryContext* context, const InstancePrimitive& prim)
     {
       const Instance* instance = prim.instance;
 
@@ -120,7 +110,7 @@ namespace embree
                            && similarityTransform(world2local, &similarityScale);
       assert((similtude && similarityScale > 0) || !similtude);
 
-      if (likely(pushInstance(context, instance->geomID, world2local, local2world)))
+      if (likely(pushInstance(context->userContext, prim.instID_, world2local, local2world)))
       {
         PointQuery query_inst;
         query_inst.time = query->time;
@@ -132,13 +122,15 @@ namespace embree
           context->query_ws, 
           similtude ? POINT_QUERY_TYPE_SPHERE : POINT_QUERY_TYPE_AABB,
           context->func, 
-          (RTCPointQueryInstanceStack*)context->instStack,
+          context->userContext,
           similarityScale,
           context->userPtr); 
 
-        instance->object->intersectors.pointQuery(&query_inst, &context_inst);
-        popInstance(context);
+        bool changed = instance->object->intersectors.pointQuery(&query_inst, &context_inst);
+        popInstance(context->userContext);
+        return changed;
       }
+      return false;
     }
 
     void InstanceIntersector1MB::intersect(const Precalculations& pre, RayHit& ray, IntersectContext* context, const InstancePrimitive& prim)
@@ -152,7 +144,7 @@ namespace embree
 #endif
       
       RTCIntersectContext* user_context = context->user;
-      if (likely(instance_id_stack::push(user_context, instance->geomID)))
+      if (likely(instance_id_stack::push(user_context, prim.instID_)))
       {
         const AffineSpace3fa world2local = instance->getWorld2Local(ray.time());
         const Vec3fa ray_org = ray.org;
@@ -179,7 +171,7 @@ namespace embree
       
       RTCIntersectContext* user_context = context->user;
       bool occluded = false;
-      if (likely(instance_id_stack::push(user_context, instance->geomID)))
+      if (likely(instance_id_stack::push(user_context, prim.instID_)))
       {
         const AffineSpace3fa world2local = instance->getWorld2Local(ray.time());
         const Vec3fa ray_org = ray.org;
@@ -196,7 +188,7 @@ namespace embree
       return occluded;
     }
     
-    void InstanceIntersector1MB::pointQuery(PointQuery* query, PointQueryContext* context, const InstancePrimitive& prim)
+    bool InstanceIntersector1MB::pointQuery(PointQuery* query, PointQueryContext* context, const InstancePrimitive& prim)
     {
       const Instance* instance = prim.instance;
 
@@ -206,7 +198,7 @@ namespace embree
       const bool similtude = context->query_type == POINT_QUERY_TYPE_SPHERE
                            && similarityTransform(world2local, &similarityScale);
 
-      if (likely(pushInstance(context, instance->geomID, world2local, local2world)))
+      if (likely(pushInstance(context->userContext, prim.instID_, world2local, local2world)))
       {
         PointQuery query_inst;
         query_inst.time = query->time;
@@ -218,13 +210,15 @@ namespace embree
           context->query_ws, 
           similtude ? POINT_QUERY_TYPE_SPHERE : POINT_QUERY_TYPE_AABB,
           context->func, 
-          (RTCPointQueryInstanceStack*)context->instStack,
+          context->userContext,
           similarityScale,
           context->userPtr); 
 
-        instance->object->intersectors.pointQuery(&query_inst, &context_inst);
-        popInstance(context);
+        bool changed = instance->object->intersectors.pointQuery(&query_inst, &context_inst);
+        popInstance(context->userContext);
+        return changed;
       }
+      return false;
     }
     
     template<int K>
@@ -232,6 +226,7 @@ namespace embree
     {
       vbool<K> valid = valid_i;
       const Instance* instance = prim.instance;
+      //ray.geomID = 10;
       
       /* perform ray mask test */
 #if defined(EMBREE_RAY_MASK)
@@ -240,7 +235,7 @@ namespace embree
 #endif
         
       RTCIntersectContext* user_context = context->user;
-      if (likely(instance_id_stack::push(user_context, instance->geomID)))
+      if (likely(instance_id_stack::push(user_context, prim.instID_)))
       {
         AffineSpace3vf<K> world2local = instance->getWorld2Local();
         const Vec3vf<K> ray_org = ray.org;
@@ -269,7 +264,7 @@ namespace embree
         
       RTCIntersectContext* user_context = context->user;
       vbool<K> occluded = false;
-      if (likely(instance_id_stack::push(user_context, instance->geomID)))
+      if (likely(instance_id_stack::push(user_context, prim.instID_)))
       {
         AffineSpace3vf<K> world2local = instance->getWorld2Local();
         const Vec3vf<K> ray_org = ray.org;
@@ -299,7 +294,7 @@ namespace embree
 #endif
         
       RTCIntersectContext* user_context = context->user;
-      if (likely(instance_id_stack::push(user_context, instance->geomID)))
+      if (likely(instance_id_stack::push(user_context, prim.instID_)))
       {
         AffineSpace3vf<K> world2local = instance->getWorld2Local<K>(valid, ray.time());
         const Vec3vf<K> ray_org = ray.org;
@@ -328,7 +323,7 @@ namespace embree
         
       RTCIntersectContext* user_context = context->user;
       vbool<K> occluded = false;
-      if (likely(instance_id_stack::push(user_context, instance->geomID)))
+      if (likely(instance_id_stack::push(user_context, prim.instID_)))
       {
         AffineSpace3vf<K> world2local = instance->getWorld2Local<K>(valid, ray.time());
         const Vec3vf<K> ray_org = ray.org;

@@ -1,20 +1,13 @@
-## ======================================================================== ##
-## Copyright 2009-2018 Intel Corporation                                    ##
-##                                                                          ##
-## Licensed under the Apache License, Version 2.0 (the "License");          ##
-## you may not use this file except in compliance with the License.         ##
-## You may obtain a copy of the License at                                  ##
-##                                                                          ##
-##     http://www.apache.org/licenses/LICENSE-2.0                           ##
-##                                                                          ##
-## Unless required by applicable law or agreed to in writing, software      ##
-## distributed under the License is distributed on an "AS IS" BASIS,        ##
-## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. ##
-## See the License for the specific language governing permissions and      ##
-## limitations under the License.                                           ##
-## ======================================================================== ##
+## Copyright 2009-2020 Intel Corporation
+## SPDX-License-Identifier: Apache-2.0
 
-IF (WIN32)
+IF (NOT WIN32 OR EMBREE_EXTERNAL_GLFW)
+
+  FIND_PACKAGE(glfw3 REQUIRED)
+  SET(GLFW_LIBRARY glfw)
+  SET(GLFW_INCLUDE_DIRS)
+  
+ELSE()
 
   # detect and select Win32 or x64
   IF (CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -32,22 +25,12 @@ IF (WIN32)
 
   FIND_PATH(GLFW_INCLUDE_DIRS NAMES GLFW/glfw3.h PATHS common/glfw/include)
   FIND_LIBRARY(GLFW_LIBRARY glfw3 common/glfw/${ARCH}/${VCVER})
-  SET(GLFW_STATIC_LIBRARIES ${GLFW_LIBRARY})
   MARK_AS_ADVANCED(
     GLFW_INCLUDE_DIR
     GLFW_LIBRARY
   )
+ENDIF()
 
-ELSE (WIN32)
-  
-  FIND_PACKAGE(PkgConfig REQUIRED)
-  PKG_SEARCH_MODULE(GLFW QUIET glfw3)
-  IF (NOT GLFW_FOUND)
-    MESSAGE(FATAL_ERROR "GLFW not found! Please either install GLFW or disable EMBREE_TUTORIALS.")
-  ENDIF()
-
-  LINK_DIRECTORIES(${GLFW_LIBRARY_DIRS})
-ENDIF (WIN32)
 
 FIND_PACKAGE(OpenGL)
 IF (NOT OPENGL_FOUND)
@@ -85,8 +68,12 @@ ADD_SUBDIRECTORY(convert)
 ADD_SUBDIRECTORY(curve_geometry)
 ADD_SUBDIRECTORY(point_geometry)
 ADD_SUBDIRECTORY(buildbench)
+ADD_SUBDIRECTORY(collide)
 ADD_SUBDIRECTORY(closest_point)
 ADD_SUBDIRECTORY(voronoi)
+ADD_SUBDIRECTORY(next_hit)
+ADD_SUBDIRECTORY(multiscene_geometry)
+ADD_SUBDIRECTORY(quaternion_motion_blur)
 
 IF (EMBREE_RAY_PACKETS)
   ADD_SUBDIRECTORY(viewer_stream)

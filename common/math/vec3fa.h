@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -52,7 +39,7 @@ namespace embree
     __forceinline Vec3fa& operator =( const Vec3fa& other ) { m128 = other.m128; return *this; }
 
     __forceinline explicit Vec3fa( const float a ) : m128(_mm_set1_ps(a)) {}
-    __forceinline          Vec3fa( const float x, const float y, const float z) : m128(_mm_set_ps(z, z, y, x)) {}
+    __forceinline          Vec3fa( const float x, const float y, const float z) : m128(_mm_set_ps(0, z, y, x)) {}
 
     __forceinline Vec3fa( const Vec3fa& other, const int      a1) { m128 = other.m128; a = a1; }
     __forceinline Vec3fa( const Vec3fa& other, const unsigned a1) { m128 = other.m128; u = a1; }
@@ -370,7 +357,7 @@ namespace embree
   /// Output Operators
   ////////////////////////////////////////////////////////////////////////////////
 
-  inline std::ostream& operator<<(std::ostream& cout, const Vec3fa& a) {
+  __forceinline embree_ostream operator<<(embree_ostream cout, const Vec3fa& a) {
     return cout << "(" << a.x << ", " << a.y << ", " << a.z << ")";
   }
 

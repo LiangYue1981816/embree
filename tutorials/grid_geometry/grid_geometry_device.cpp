@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #include "../common/tutorial/tutorial_device.h"
 
@@ -166,10 +153,8 @@ Vec3fa getVertex(GridMesh& gmesh, Grid& grid, int x, int y)
   int startVertexID = grid.startVertexID;
   int strideX = grid.strideX;
   int strideY = grid.strideY;
-  MAYBE_UNUSED int width = (int)grid.width;
-  MAYBE_UNUSED int height = (int)grid.height;
-  assert(x >= 0 && x < width);
-  assert(y >= 0 && y < height);
+  assert(x >= 0 && x < (int)grid.width);
+  assert(y >= 0 && y < (int)grid.height);
   return Vec3fa(gmesh.vertices[startVertexID + y*strideY + x*strideX]);
 }
 
@@ -179,10 +164,8 @@ Vec3fa getVertex(GridMesh& gmesh, Grid& grid, int x, int y)
   int startVertexID = grid.startVertexID;
   int strideX = grid.strideX;
   int strideY = grid.strideY;
-  int width   = (int)grid.width;
-  int height  = (int)grid.height;
-  assert(x >= 0 && x < (int)width);
-  assert(y >= 0 && y < (int)height);
+  assert(x >= 0 && x < (int)grid.width);
+  assert(y >= 0 && y < (int)grid.height);
   return Vec3fa(gmesh.vertices[startVertexID + y*strideY + x*strideX]);
 }
 #endif
@@ -571,10 +554,6 @@ extern "C" void device_init (char* cfg)
    
   /* commit changes to scene */
   rtcCommitScene (g_scene);
-
-  /* set start render mode */
-  renderTile = renderTileStandard;
-  key_pressed_handler = device_key_pressed_default;
 }
 
 Vec3fa mylerp(float f, const Vec3fa& a, const Vec3fa& b) { // FIXME: use lerpr, need to make ISPC lerpr and C++ lerpr compatible first
@@ -679,15 +658,14 @@ void renderTileTask (int taskIndex, int threadIndex, int* pixels,
                          const int numTilesX,
                          const int numTilesY)
 {
-  renderTile(taskIndex,threadIndex,pixels,width,height,time,camera,numTilesX,numTilesY);
+  renderTileStandard(taskIndex,threadIndex,pixels,width,height,time,camera,numTilesX,numTilesY);
 }
 
-/* called by the C++ code to render */
-extern "C" void device_render (int* pixels,
-                           const unsigned int width,
-                           const unsigned int height,
-                           const float time,
-                           const ISPCCamera& camera)
+extern "C" void renderFrameStandard (int* pixels,
+                          const unsigned int width,
+                          const unsigned int height,
+                          const float time,
+                          const ISPCCamera& camera)
 {
   /* render image */
   const int numTilesX = (width +TILE_SIZE_X-1)/TILE_SIZE_X;
@@ -699,12 +677,21 @@ extern "C" void device_render (int* pixels,
   }); 
 }
 
+/* called by the C++ code to render */
+extern "C" void device_render (int* pixels,
+                           const unsigned int width,
+                           const unsigned int height,
+                           const float time,
+                           const ISPCCamera& camera)
+{
+}
+
 /* called by the C++ code for cleanup */
 extern "C" void device_cleanup ()
 {
   alignedFree(gmesh.normals);
-  rtcReleaseGeometry (gmesh.geom);
-  rtcReleaseGeometry (gmesh.geomNormals);
+  rtcReleaseGeometry(gmesh.geom);
+  rtcReleaseGeometry(gmesh.geomNormals);
   rtcReleaseScene (g_scene); g_scene = nullptr;
 }
 

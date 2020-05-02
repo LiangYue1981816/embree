@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #include "../common/tutorial/tutorial_device.isph"
 
@@ -164,10 +151,8 @@ uniform Vec3f getVertex(uniform GridMesh& gmesh, uniform Grid& grid, uniform int
   uniform int startVertexID = grid.startVertexID;
   uniform int strideX = grid.strideX;
   uniform int strideY = grid.strideY;
-  uniform int width   = (int)grid.width;
-  uniform int height  = (int)grid.height;
-  assert(x >= 0 && x < width);
-  assert(y >= 0 && y < height);
+  assert(x >= 0 && x < (int)grid.width);
+  assert(y >= 0 && y < (int)grid.height);
   return make_Vec3f(gmesh.vertices[startVertexID + y*strideY + x*strideX]);
 }
 
@@ -177,10 +162,8 @@ varying Vec3f getVertex(uniform GridMesh& gmesh, uniform Grid& grid, varying int
   uniform int startVertexID = grid.startVertexID;
   uniform int strideX = grid.strideX;
   uniform int strideY = grid.strideY;
-  uniform int width   = (int)grid.width;
-  uniform int height  = (int)grid.height;
-  assert(x >= 0 && x < (int)width);
-  assert(y >= 0 && y < (int)height);
+  assert(x >= 0 && x < (int)grid.width);
+  assert(y >= 0 && y < (int)grid.height);
   return make_Vec3f(gmesh.vertices[startVertexID + y*strideY + x*strideX]);
 }
 #endif
@@ -569,10 +552,6 @@ export void device_init (uniform int8* uniform cfg)
    
   /* commit changes to scene */
   rtcCommitScene (g_scene);
-
-  /* set start render mode */
-  renderTile = renderTileStandard;
-  key_pressed_handler = device_key_pressed_default;
 }
 
 Vec3f mylerp(float f, const Vec3f& a, const Vec3f& b) { // FIXME: use lerp, need to make ISPC lerp and C++ lerp compatible first
@@ -677,7 +656,19 @@ task void renderTileTask(uniform int* uniform pixels,
                          const uniform int numTilesX,
                          const uniform int numTilesY)
 {
-  renderTile(taskIndex,threadIndex,pixels,width,height,time,camera,numTilesX,numTilesY);
+  renderTileStandard(taskIndex,threadIndex,pixels,width,height,time,camera,numTilesX,numTilesY);
+}
+
+export void renderFrameStandard (uniform int* uniform pixels,
+                          const uniform unsigned int width,
+                          const uniform unsigned int height,
+                          const uniform float time,
+                          const uniform ISPCCamera& camera)
+{
+  /* render image */
+  const uniform int numTilesX = (width +TILE_SIZE_X-1)/TILE_SIZE_X;
+  const uniform int numTilesY = (height+TILE_SIZE_Y-1)/TILE_SIZE_Y;
+  launch[numTilesX*numTilesY] renderTileTask(pixels,width,height,time,camera,numTilesX,numTilesY); sync;
 }
 
 /* called by the C++ code to render */
@@ -687,16 +678,12 @@ export void device_render (uniform int* uniform pixels,
                            const uniform float time,
                            const uniform ISPCCamera& camera)
 {
-  /* render image */
-  const uniform int numTilesX = (width +TILE_SIZE_X-1)/TILE_SIZE_X;
-  const uniform int numTilesY = (height+TILE_SIZE_Y-1)/TILE_SIZE_Y;
-  launch[numTilesX*numTilesY] renderTileTask(pixels,width,height,time,camera,numTilesX,numTilesY); sync;
 }
 
 /* called by the C++ code for cleanup */
 export void device_cleanup ()
 {
-  delete gmesh.normals;
+  delete[] gmesh.normals;
   rtcReleaseGeometry(gmesh.geom);
   rtcReleaseGeometry(gmesh.geomNormals);
   rtcReleaseScene (g_scene); g_scene = NULL;

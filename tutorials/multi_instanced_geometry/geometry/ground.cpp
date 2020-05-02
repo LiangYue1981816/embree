@@ -1,3 +1,6 @@
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
+
 namespace Ground {
   static const float vertices[] = {
     -92.0791f, -9.47014f, -1.19209e-07f, -90.5184f, -9.47014f, 18.7279f,

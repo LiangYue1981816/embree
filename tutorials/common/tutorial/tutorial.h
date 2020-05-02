@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -36,7 +23,7 @@ namespace embree
   extern "C" void device_resize(int width, int height);
   extern "C" void device_render(unsigned* pixels, const unsigned width, const unsigned height, const float time, const ISPCCamera& camera);
   extern "C" bool device_pick(const float x, const float y, const ISPCCamera& camera, Vec3fa& hitPos);
-  extern "C" void device_key_pressed (int key);
+  //extern "C" void device_key_pressed (int key);
   extern "C" void device_cleanup();
 
   template<typename Ty>
@@ -98,6 +85,9 @@ namespace embree
     /* render to file mode */
     void renderToFile(const FileName& fileName);
 
+    /* compare rendering to reference image */
+    void compareToReferenceImage(const FileName& fileName);
+
     /* passes parameters to the backend */
     void set_parameter(size_t parm, ssize_t val);
 
@@ -115,6 +105,7 @@ namespace embree
  
     /* GLFW callback functions */
   public:
+    virtual void keypressed(int key);
     virtual void keyboardFunc(GLFWwindow* window, int key, int scancode, int action, int mods);
     virtual void clickFunc(GLFWwindow* window, int button, int action, int mods);
     virtual void motionFunc(GLFWwindow* window, double x, double y);
@@ -122,6 +113,9 @@ namespace embree
     virtual void reshapeFunc(GLFWwindow* window, int width, int height);
     virtual void drawGUI() {}; 
 
+  public:
+    virtual void render(unsigned* pixels, const unsigned width, const unsigned height, const float time, const ISPCCamera& camera);
+  
   public:
     std::string tutorialName;
 
@@ -136,6 +130,8 @@ namespace embree
 
     /* image output settings */
     FileName outputImageFilename;
+    FileName referenceImageFilename;
+    float referenceImageThreshold; // threshold when we consider images to differ
 
     /* benchmark mode settings */
     size_t skipBenchmarkFrames;
@@ -216,7 +212,7 @@ namespace embree
     unsigned grid_resX, grid_resY;
     bool remove_mblur;
     bool remove_non_mblur;
-    FileName sceneFilename;
+    std::vector<FileName> sceneFilename;
     std::vector<FileName> keyFramesFilenames;
     SceneGraph::InstancingMode instancing_mode;
     std::string subdiv_mode;

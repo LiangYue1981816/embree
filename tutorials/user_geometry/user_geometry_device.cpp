@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #include "../common/tutorial/tutorial_device.h"
 
@@ -31,14 +18,38 @@ void renderTileStandardStream(int taskIndex,
                               const int numTilesX,
                               const int numTilesY);
 
+/*
+ * Safely invalidate a packet of rays.
+ */
+inline void invalidateRay(Ray& ray)
+{
+  // Initialize the whole ray so that it is invalid. This is important because
+  // in streamed mode, active state of lanes is forgotten between ray
+  // generation and traversal.
+  {
+    ray.org = Vec3fa(0.f);
+    ray.dir = Vec3fa(0.f);
+    ray.tnear() = pos_inf;
+    ray.tfar = neg_inf;
+  }
+}
+
 inline void pushInstanceId(RTCIntersectContext* ctx, unsigned int id)
 {
+#if RTC_MAX_INSTANCE_LEVEL_COUNT > 1
   ctx->instID[ctx->instStackSize++] = id;
+#else
+  ctx->instID[0] = id;
+#endif
 }
 
 inline void popInstanceId(RTCIntersectContext* ctx)
 {
+#if RTC_MAX_INSTANCE_LEVEL_COUNT > 1
   ctx->instID[--ctx->instStackSize] = RTC_INVALID_GEOMETRY_ID;
+#else
+  ctx->instID[0] = RTC_INVALID_GEOMETRY_ID;
+#endif
 }
 
 inline void copyInstanceIdStack(const RTCIntersectContext* ctx, unsigned* tgt)
@@ -179,6 +190,7 @@ void instanceIntersectFuncN(const RTCIntersectFunctionNArguments* args)
 
     /* create transformed ray */
     Ray ray;
+    invalidateRay(ray);
     const Vec3fa ray_org = Vec3fa(RTCRayN_org_x(rays,N,ui),RTCRayN_org_y(rays,N,ui),RTCRayN_org_z(rays,N,ui));
     const Vec3fa ray_dir = Vec3fa(RTCRayN_dir_x(rays,N,ui),RTCRayN_dir_y(rays,N,ui),RTCRayN_dir_z(rays,N,ui));
     ray.org = xfmPoint (instance->world2local,ray_org);
@@ -226,14 +238,15 @@ void instanceOccludedFuncN(const RTCOccludedFunctionNArguments* args)
 
     /* create transformed ray */
     Ray ray;
+    invalidateRay(ray);
     const Vec3fa ray_org = Vec3fa(RTCRayN_org_x(rays,N,ui),RTCRayN_org_y(rays,N,ui),RTCRayN_org_z(rays,N,ui));
     const Vec3fa ray_dir = Vec3fa(RTCRayN_dir_x(rays,N,ui),RTCRayN_dir_y(rays,N,ui),RTCRayN_dir_z(rays,N,ui));
     ray.org = xfmPoint (instance->world2local,ray_org);
     ray.dir = xfmVector(instance->world2local,ray_dir);
     ray.tnear() = RTCRayN_tnear(rays,N,ui);
     ray.tfar = RTCRayN_tfar(rays,N,ui);
-    ray.time() = RTCRayN_time(rays,N,ui);
-    ray.mask = RTCRayN_mask(rays,N,ui);
+    ray.time()  = RTCRayN_time(rays,N,ui);
+    ray.mask  = RTCRayN_mask(rays,N,ui);
     ray.geomID = RTC_INVALID_GEOMETRY_ID;
 
     /* trace ray through object */
@@ -721,7 +734,8 @@ void sphereFilterFunction(const RTCFilterFunctionNArguments* args)
   const IntersectContext* context = (const IntersectContext*) args->context;
   struct Ray* ray    = (struct Ray*)args->ray;
   //struct RTCHit* hit = (struct RTCHit*)args->hit;
-  assert(args->N == 1);
+  const unsigned int N = args->N;
+  assert(N == 1);
 
 
   /* avoid crashing when debug visualizations are used */
@@ -842,7 +856,6 @@ unsigned int createTriangulatedSphere (RTCScene scene, const Vec3fa& p, float r)
 {
   /* create triangle mesh */
   RTCGeometry geom = rtcNewGeometry (g_device, RTC_GEOMETRY_TYPE_TRIANGLE);
-  unsigned int geomID = rtcAttachGeometry(scene,geom);
 
   /* map triangle and vertex buffers */
   Vertex* vertices = (Vertex*) rtcSetNewGeometryBuffer(geom,RTC_BUFFER_TYPE_VERTEX,0,RTC_FORMAT_FLOAT3,sizeof(Vertex),numTheta*(numPhi+1));
@@ -890,6 +903,7 @@ unsigned int createTriangulatedSphere (RTCScene scene, const Vec3fa& p, float r)
   }
 
   rtcCommitGeometry(geom);
+  unsigned int geomID = rtcAttachGeometry(scene,geom);
   rtcReleaseGeometry(geom);
   return geomID;
 }
@@ -995,11 +1009,6 @@ extern "C" void device_init (char* cfg)
   colors[4][1] = Vec3fa(1.0f, 1.0f, 1.0f);
   colors[4][2] = Vec3fa(1.0f, 1.0f, 1.0f);
   colors[4][3] = Vec3fa(1.0f, 1.0f, 1.0f);
-
-  /* set start render mode */
-  if (g_mode == MODE_NORMAL) renderTile = renderTileStandard;
-  else                       renderTile = renderTileStandardStream;
-  key_pressed_handler = device_key_pressed_default;
 }
 
 inline Vec3fa face_forward(const Vec3fa& dir, const Vec3fa& _Ng) {
@@ -1039,7 +1048,7 @@ Vec3fa renderPixelStandard(float x, float y, const ISPCCamera& camera, RayStats&
     Vec3fa diffuse = Vec3fa(0.0f);
     if      (ray.instID[0] ==  0) diffuse = colors[ray.instID[0]][ray.primID];
     else if (ray.instID[0] == -1) diffuse = colors[4][ray.primID];
-    else                          diffuse = colors[ray.instID[0]][ray.geomID];
+    else                       diffuse = colors[ray.instID[0]][ray.geomID];
     color = color + diffuse*0.5;
 
     /* initialize shadow ray */
@@ -1077,6 +1086,8 @@ void renderTileStandard(int taskIndex,
 
   for (unsigned int y=y0; y<y1; y++) for (unsigned int x=x0; x<x1; x++)
   {
+    
+
     /* calculate pixel color */
     Vec3fa color = renderPixelStandard((float)x,(float)y,camera,g_stats[threadIndex]);
 
@@ -1126,7 +1137,10 @@ void renderTileStandardStream(int taskIndex,
 
     /* initialize ray */
     Ray& primary = primary_stream[N];
-    init_Ray(primary, Vec3fa(camera.xfm.p), Vec3fa(normalize((float)x*camera.xfm.l.vx + (float)y*camera.xfm.l.vy + camera.xfm.l.vz)), 0.f, pos_inf, 0.0f, -1,
+    invalidateRay(primary);
+
+    init_Ray(primary, Vec3fa(camera.xfm.p), Vec3fa(normalize((float)x*camera.xfm.l.vx +
+    (float)y*camera.xfm.l.vy + camera.xfm.l.vz)), 0.f, pos_inf, 0.0f, -1,
              RTC_INVALID_GEOMETRY_ID, RTC_INVALID_GEOMETRY_ID);
     N++;
     RayStats_addRay(stats);
@@ -1151,6 +1165,8 @@ void renderTileStandardStream(int taskIndex,
     /* invalidate shadow rays by default */
     Ray& shadow = shadow_stream[N];
     {
+      shadow.org = Vec3fa(0.f);
+      shadow.dir = Vec3fa(0.f);
       shadow.tnear() = (float)(pos_inf);
       shadow.tfar  = (float)(neg_inf);
     }
@@ -1242,8 +1258,29 @@ void renderTileTask (int taskIndex, int threadIndex, int* pixels,
                          const int numTilesX,
                          const int numTilesY)
 {
-  renderTile(taskIndex,threadIndex,pixels,width,height,time,camera,numTilesX,numTilesY);
+  if (g_mode == MODE_NORMAL)
+    renderTileStandard(taskIndex,threadIndex,pixels,width,height,time,camera,numTilesX,numTilesY);
+  else
+    renderTileStandardStream(taskIndex,threadIndex,pixels,width,height,time,camera,numTilesX,numTilesY);
+  
 }
+
+extern "C" void renderFrameStandard (int* pixels,
+                          const unsigned int width,
+                          const unsigned int height,
+                          const float time,
+                          const ISPCCamera& camera)
+{
+  /* render all pixels */
+  const int numTilesX = (width +TILE_SIZE_X-1)/TILE_SIZE_X;
+  const int numTilesY = (height+TILE_SIZE_Y-1)/TILE_SIZE_Y;
+  parallel_for(size_t(0),size_t(numTilesX*numTilesY),[&](const range<size_t>& range) {
+    const int threadIndex = (int)TaskScheduler::threadIndex();
+    for (size_t i=range.begin(); i<range.end(); i++)
+      renderTileTask((int)i,threadIndex,pixels,width,height,time,camera,numTilesX,numTilesY);
+  }); 
+}
+
 
 /* called by the C++ code to render */
 extern "C" void device_render (int* pixels,
@@ -1273,15 +1310,6 @@ extern "C" void device_render (int* pixels,
   updateInstance(g_scene,g_instance[2]);
   updateInstance(g_scene,g_instance[3]);
   rtcCommitScene (g_scene);
-
-  /* render all pixels */
-  const int numTilesX = (width +TILE_SIZE_X-1)/TILE_SIZE_X;
-  const int numTilesY = (height+TILE_SIZE_Y-1)/TILE_SIZE_Y;
-  parallel_for(size_t(0),size_t(numTilesX*numTilesY),[&](const range<size_t>& range) {
-    const int threadIndex = (int)TaskScheduler::threadIndex();
-    for (size_t i=range.begin(); i<range.end(); i++)
-      renderTileTask((int)i,threadIndex,pixels,width,height,time,camera,numTilesX,numTilesY);
-  }); 
 }
 
 /* called by the C++ code for cleanup */

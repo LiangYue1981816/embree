@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #include "geometry.h"
 #include "scene.h"
@@ -51,17 +38,18 @@ namespace embree
     "oriented_disc",
     "",
     "usergeom",
-    "instance",
+    "instance_cheap",
+    "instance_expensive",
   };
      
   Geometry::Geometry (Device* device, GType gtype, unsigned int numPrimitives, unsigned int numTimeSteps) 
-    : device(device), scene(nullptr), userPtr(nullptr),
-      geomID(0), numPrimitives(numPrimitives), numTimeSteps(unsigned(numTimeSteps)), fnumTimeSegments(float(numTimeSteps-1)), time_range(0.0f,1.0f),
+    : device(device), userPtr(nullptr),
+      numPrimitives(numPrimitives), numTimeSteps(unsigned(numTimeSteps)), fnumTimeSegments(float(numTimeSteps-1)), time_range(0.0f,1.0f),
       mask(-1),
       gtype(gtype),
+      gsubtype(GTY_SUBTYPE_DEFAULT),
       quality(RTC_BUILD_QUALITY_MEDIUM),
-      state(MODIFIED),
-      numPrimitivesChanged(false),
+      state((unsigned)State::MODIFIED),
       enabled(true),
       intersectionFilterN(nullptr), occlusionFilterN(nullptr), pointQueryFunc(nullptr)
   {
@@ -77,23 +65,19 @@ namespace embree
   {      
     if (numPrimitives_in == numPrimitives) return;
     
-    if (isEnabled() && scene) disabling();
     numPrimitives = numPrimitives_in;
-    numPrimitivesChanged = true;
-    if (isEnabled() && scene) enabling();
     
     Geometry::update();
   }
 
   void Geometry::setNumTimeSteps (unsigned int numTimeSteps_in)
   {
-    if (numTimeSteps_in == numTimeSteps)
+    if (numTimeSteps_in == numTimeSteps) {
       return;
+    }
     
-    if (isEnabled() && scene) disabling();
     numTimeSteps = numTimeSteps_in;
     fnumTimeSegments = float(numTimeSteps_in-1);
-    if (isEnabled() && scene) enabling();
     
     Geometry::update();
   }
@@ -104,98 +88,44 @@ namespace embree
     Geometry::update();
   }
   
-  void Geometry::update() 
+  void Geometry::update()
   {
-    if (scene)
-      scene->setModified();
-
-    state = MODIFIED;
+    ++modCounter_; // FIXME: required?
+    state = (unsigned)State::MODIFIED;
   }
   
   void Geometry::commit() 
   {
-    if (scene)
-      scene->setModified();
-
-    state = COMMITTED;
+    ++modCounter_;
+    state = (unsigned)State::COMMITTED;
   }
 
   void Geometry::preCommit()
   {
-    if (state == MODIFIED)
+    if (State::MODIFIED == (State)state)
       throw_RTCError(RTC_ERROR_INVALID_OPERATION,"geometry not committed");
   }
 
   void Geometry::postCommit()
   {
-    numPrimitivesChanged = false;
-    
-    /* set state to build */
-    if (isEnabled())
-      state = BUILD;
   }
 
-  void Geometry::updateIntersectionFilters(bool enable)
-  {
-    const size_t numN  = (intersectionFilterN  != nullptr) + (occlusionFilterN  != nullptr);
-
-    if (enable) {
-      scene->numIntersectionFiltersN += numN;
-    } else {
-      scene->numIntersectionFiltersN -= numN;
-    }
-  }
-
-  Geometry* Geometry::attach(Scene* scene, unsigned int geomID)
-  {
-    assert(scene);
-    this->scene = scene;
-    this->geomID = geomID;
-    if (isEnabled()) {
-      scene->setModified();
-      updateIntersectionFilters(true);
-      enabling();
-    }
-    return this;
-  }
-
-  void Geometry::detach()
-  {
-    if (isEnabled()) {
-      scene->setModified();
-      updateIntersectionFilters(false);
-      disabling();
-    }
-    this->scene = nullptr;
-    this->geomID = -1;
-  }
-  
   void Geometry::enable () 
   {
     if (isEnabled()) 
       return;
 
-    if (scene) {
-      updateIntersectionFilters(true);
-      scene->setModified();
-      enabling();
-    }
-
     enabled = true;
+    ++modCounter_;
   }
 
   void Geometry::disable () 
   {
     if (isDisabled()) 
       return;
-
-    if (scene) {
-      updateIntersectionFilters(false);
-      scene->setModified();
-      disabling();
-    }
     
     enabled = false;
+    ++modCounter_;
   }
 
   void Geometry::setUserData (void* ptr)
@@ -208,10 +138,6 @@ namespace embree
     if (!(getTypeMask() & (MTY_TRIANGLE_MESH | MTY_QUAD_MESH | MTY_CURVES | MTY_SUBDIV_MESH | MTY_USER_GEOMETRY | MTY_GRID_MESH)))
       throw_RTCError(RTC_ERROR_INVALID_OPERATION,"filter functions not supported for this geometry"); 
 
-    if (scene && isEnabled()) {
-      scene->numIntersectionFiltersN -= intersectionFilterN != nullptr;
-      scene->numIntersectionFiltersN += filter != nullptr;
-    }
     intersectionFilterN = filter;
   }
 
@@ -220,19 +146,11 @@ namespace embree
     if (!(getTypeMask() & (MTY_TRIANGLE_MESH | MTY_QUAD_MESH | MTY_CURVES | MTY_SUBDIV_MESH | MTY_USER_GEOMETRY | MTY_GRID_MESH)))
       throw_RTCError(RTC_ERROR_INVALID_OPERATION,"filter functions not supported for this geometry"); 
 
-    if (scene && isEnabled()) {
-      scene->numIntersectionFiltersN -= occlusionFilterN != nullptr;
-      scene->numIntersectionFiltersN += filter != nullptr;
-    }
     occlusionFilterN = filter;
   }
   
   void Geometry::setPointQueryFunction (RTCPointQueryFunction func) 
   {
-    // TODO: PointQuery test if all these primitve types work
-    if (!(getTypeMask() & (MTY_TRIANGLE_MESH | MTY_QUAD_MESH | MTY_USER_GEOMETRY | MTY_GRID_MESH)))
-      throw_RTCError(RTC_ERROR_INVALID_OPERATION,"point query functions not supported for this geometry"); 
-
     pointQueryFunc = func;
   }
 
@@ -310,7 +228,7 @@ namespace embree
     }
   }
     
-  void Geometry::pointQuery(PointQuery* query, PointQueryContext* context)
+  bool Geometry::pointQuery(PointQuery* query, PointQueryContext* context)
   {
     assert(context->primID < size());
    
@@ -319,14 +237,14 @@ namespace embree
     args.userPtr         = context->userPtr;
     args.primID          = context->primID;
     args.geomID          = context->geomID;
-    args.instStack       = (RTCPointQueryInstanceStack*)context->instStack;
+    args.context         = context->userContext;
     args.similarityScale = context->similarityScale;
     
     bool update = false;
     if(context->func)  update |= context->func(&args);
     if(pointQueryFunc) update |= pointQueryFunc(&args);
 
-    if (update && context->instStack->size > 0) 
+    if (update && context->userContext->instStackSize > 0)
     {
       // update point query
       if (context->query_type == POINT_QUERY_TYPE_AABB) {
@@ -336,5 +254,6 @@ namespace embree
         query->radius = context->query_ws->radius * context->similarityScale;
       }
     }
+    return update;
   }
 }

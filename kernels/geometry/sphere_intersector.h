@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -28,32 +15,22 @@ namespace embree
     {
       __forceinline SphereIntersectorHitM() {}
 
-      __forceinline SphereIntersectorHitM(const vfloat<M>& u,
-                                          const vfloat<M>& v,
-                                          const vfloat<M>& t,
-                                          const Vec3vf<M>& Ng)
-          : vu(u), vv(v), vt(t), vNg(Ng)
-      {
-      }
+      __forceinline SphereIntersectorHitM(const vfloat<M>& t, const Vec3vf<M>& Ng)
+        : vt(t), vNg(Ng) {}
 
       __forceinline void finalize() {}
 
-      __forceinline Vec2f uv(const size_t i) const
-      {
-        return Vec2f(vu[i], vv[i]);
+      __forceinline Vec2f uv(const size_t i) const {
+        return Vec2f(0.0f, 0.0f);
       }
-      __forceinline float t(const size_t i) const
-      {
+      __forceinline float t(const size_t i) const {
         return vt[i];
       }
-      __forceinline Vec3fa Ng(const size_t i) const
-      {
+      __forceinline Vec3fa Ng(const size_t i) const {
         return Vec3fa(vNg.x[i], vNg.y[i], vNg.z[i]);
       }
 
      public:
-      vfloat<M> vu;
-      vfloat<M> vv;
       vfloat<M> vt;
       Vec3vf<M> vNg;
     };
@@ -84,25 +61,40 @@ namespace embree
         if (unlikely(none(valid)))
           return false;
 
-        vfloat<M> td          = sqrt((r2 - l2) * rd2);
-        const vfloat<M> t_in  = projC0 - td;
-        const vfloat<M> t_out = projC0 + td;
+        const vfloat<M> td      = sqrt((r2 - l2) * rd2);
+        const vfloat<M> t_front = projC0 - td;
+        const vfloat<M> t_back  = projC0 + td;
 
-        const vbool<M> valid_in  = valid & (t_in > ray.tnear()) & (t_in < ray.tfar);
-        const vbool<M> valid_out = valid & !valid_in & (t_out > ray.tnear()) & (t_out < ray.tfar);
+        const vbool<M> valid_front = valid & (ray.tnear() <= t_front) & (t_front <= ray.tfar);
+        const vbool<M> valid_back  = valid & (ray.tnear() <= t_back ) & (t_back  <= ray.tfar);
 
-        td          = select(valid_in, -1.0f * td, td);
-        vfloat<M> t = 0.f;
-        t           = select(valid_in, t_in, t);
-        t           = select(valid_out, t_out, t);
-        valid &= valid_in | valid_out;
-        if (unlikely(none(valid)))
+        /* check if there is a first hit */
+        const vbool<M> valid_first = valid_front | valid_back;
+        if (unlikely(none(valid_first)))
           return false;
 
-        const Vec3vf<M> Ng = td * ray_dir - perp;
+        /* construct first hit */
+        const vfloat<M> td_front = -td;
+        const vfloat<M> td_back  = +td;
+        const vfloat<M> t_first  = select(valid_front, t_front, t_back);
+        const Vec3vf<M> Ng_first = select(valid_front, td_front, td_back) * ray_dir - perp;
+        SphereIntersectorHitM<M> hit(t_first, Ng_first);
 
-        SphereIntersectorHitM<M> hit(zero, zero, t, Ng);
-        return epilog(valid, hit);
+        /* invoke intersection filter for first hit */
+        const bool is_hit_first = epilog(valid_first, hit);
+                
+        /* check for possible second hits before potentially accepted hit */
+        const vfloat<M> t_second = t_back;
+        const vbool<M> valid_second = valid_front & valid_back & (t_second <= ray.tfar);
+        if (unlikely(none(valid_second)))
+          return is_hit_first;
+
+        /* invoke intersection filter for second hit */
+        const Vec3vf<M> Ng_second = td_back * ray_dir - perp;
+        hit = SphereIntersectorHitM<M> (t_second, Ng_second);
+        const bool is_hit_second = epilog(valid_second, hit);
+        
+        return is_hit_first | is_hit_second;
       }
     };
 
@@ -136,25 +128,40 @@ namespace embree
         if (unlikely(none(valid)))
           return false;
 
-        vfloat<M> td          = sqrt((r2 - l2) * rd2);
-        const vfloat<M> t_in  = projC0 - td;
-        const vfloat<M> t_out = projC0 + td;
+        const vfloat<M> td      = sqrt((r2 - l2) * rd2);
+        const vfloat<M> t_front = projC0 - td;
+        const vfloat<M> t_back  = projC0 + td;
 
-        const vbool<M> valid_in  = valid & (t_in > ray.tnear()[k]) & (t_in < ray.tfar[k]);
-        const vbool<M> valid_out = valid & !valid_in & (t_out > ray.tnear()[k]) & (t_out < ray.tfar[k]);
+        const vbool<M> valid_front = valid & (ray.tnear()[k] <= t_front) & (t_front <= ray.tfar[k]);
+        const vbool<M> valid_back  = valid & (ray.tnear()[k] <= t_back ) & (t_back  <= ray.tfar[k]);
 
-        td          = select(valid_in, -1.0f * td, td);
-        vfloat<M> t = 0.f;
-        t           = select(valid_in, t_in, t);
-        t           = select(valid_out, t_out, t);
-        valid &= valid_in | valid_out;
-        if (unlikely(none(valid)))
+        /* check if there is a first hit */
+        const vbool<M> valid_first = valid_front | valid_back;
+        if (unlikely(none(valid_first)))
           return false;
 
-        const Vec3vf<M> Ng = td * ray_dir - perp;
+        /* construct first hit */
+        const vfloat<M> td_front = -td;
+        const vfloat<M> td_back  = +td;
+        const vfloat<M> t_first  = select(valid_front, t_front, t_back);
+        const Vec3vf<M> Ng_first = select(valid_front, td_front, td_back) * ray_dir - perp;
+        SphereIntersectorHitM<M> hit(t_first, Ng_first);
 
-        SphereIntersectorHitM<M> hit(zero, zero, t, Ng);
-        return epilog(valid, hit);
+        /* invoke intersection filter for first hit */
+        const bool is_hit_first = epilog(valid_first, hit);
+                
+        /* check for possible second hits before potentially accepted hit */
+        const vfloat<M> t_second = t_back;
+        const vbool<M> valid_second = valid_front & valid_back & (t_second <= ray.tfar[k]);
+        if (unlikely(none(valid_second)))
+          return is_hit_first;
+
+        /* invoke intersection filter for second hit */
+        const Vec3vf<M> Ng_second = td_back * ray_dir - perp;
+        hit = SphereIntersectorHitM<M> (t_second, Ng_second);
+        const bool is_hit_second = epilog(valid_second, hit);
+        
+        return is_hit_first | is_hit_second;
       }
     };
   }  // namespace isa

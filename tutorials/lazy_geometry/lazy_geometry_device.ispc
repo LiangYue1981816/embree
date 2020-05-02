@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #include "../common/tutorial/tutorial_device.isph"
 
@@ -115,6 +102,9 @@ uniform unsigned int createTriangulatedSphere (RTCScene scene, const uniform Vec
 
 void lazyCreate(uniform LazyGeometry* uniform instance)
 {
+  const bool join_commit_supported = rtcGetDeviceProperty(g_device,RTC_DEVICE_PROPERTY_JOIN_COMMIT_SUPPORTED);
+  const bool parallel_commit_supported = rtcGetDeviceProperty(g_device,RTC_DEVICE_PROPERTY_PARALLEL_COMMIT_SUPPORTED);
+    
   /* one thread will switch the object from the LAZY_INVALID state to the LAZY_CREATE state */
   if (atomic_compare_exchange_global((uniform int32*)&instance->state,LAZY_INVALID,LAZY_CREATE) == 0)
   {
@@ -123,8 +113,8 @@ void lazyCreate(uniform LazyGeometry* uniform instance)
     instance->object = rtcNewScene(g_device);
     createTriangulatedSphere(instance->object,instance->center,instance->radius);
 
-    /* when join mode is not supported we let only a single thread build */
-    if (!rtcGetDeviceProperty(g_device,RTC_DEVICE_PROPERTY_JOIN_COMMIT_SUPPORTED))
+    /* when no parallel commit mode at all is supported let only a single thread build */
+    if (!join_commit_supported && !parallel_commit_supported)
       rtcCommitScene(instance->object);
 
     /* now switch to the LAZY_COMMIT state */
@@ -139,9 +129,12 @@ void lazyCreate(uniform LazyGeometry* uniform instance)
     }
   }
 
-  /* multiple threads might enter the rtcJoinCommitScene function to jointly
-   * build the internal data structures */
-  if (rtcGetDeviceProperty(g_device,RTC_DEVICE_PROPERTY_JOIN_COMMIT_SUPPORTED))
+  /* if we support rtcCommit to get called from multiple threads, then this should be preferred for performance reasons */
+  if (parallel_commit_supported)
+    rtcCommitScene(instance->object);
+  
+  /* otherwise we could fallback to rtcJoinCommit scene, which has lower performance */
+  else if (join_commit_supported)
     rtcJoinCommitScene(instance->object);
 
   /* switch to LAZY_VALID state */
@@ -270,10 +263,6 @@ export void device_init (uniform int8* uniform cfg)
     g_objects[i] = createLazyObject(g_scene,i,10.0f*make_Vec3f(cosf(a),0,sinf(a)),1);
   }
   rtcCommitScene (g_scene);
-
-  /* set start render mode */
-  renderTile = renderTileStandard;
-  key_pressed_handler = device_key_pressed_default;
 }
 
 /* task that renders a single screen tile */
@@ -352,7 +341,19 @@ task void renderTileTask(uniform int* uniform pixels,
                          const uniform int numTilesX,
                          const uniform int numTilesY)
 {
-  renderTile(taskIndex,threadIndex,pixels,width,height,time,camera,numTilesX,numTilesY);
+  renderTileStandard(taskIndex,threadIndex,pixels,width,height,time,camera,numTilesX,numTilesY);
+}
+
+export void renderFrameStandard (uniform int* uniform pixels,
+                          const uniform unsigned int width,
+                          const uniform unsigned int height,
+                          const uniform float time,
+                          const uniform ISPCCamera& camera)
+{
+  /* render all pixels */
+  const uniform int numTilesX = (width +TILE_SIZE_X-1)/TILE_SIZE_X;
+  const uniform int numTilesY = (height+TILE_SIZE_Y-1)/TILE_SIZE_Y;
+  launch[numTilesX*numTilesY] renderTileTask(pixels,width,height,time,camera,numTilesX,numTilesY); sync;
 }
 
 /* called by the C++ code to render */
@@ -362,10 +363,6 @@ export void device_render (uniform int* uniform pixels,
                            const uniform float time,
                            const uniform ISPCCamera& camera)
 {
-  /* render all pixels */
-  const uniform int numTilesX = (width +TILE_SIZE_X-1)/TILE_SIZE_X;
-  const uniform int numTilesY = (height+TILE_SIZE_Y-1)/TILE_SIZE_Y;
-  launch[numTilesX*numTilesY] renderTileTask(pixels,width,height,time,camera,numTilesX,numTilesY); sync;
 }
 
 /* called by the C++ code for cleanup */

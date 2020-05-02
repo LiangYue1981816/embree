@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #include "../common/tutorial/tutorial_device.isph"
 
@@ -47,12 +34,20 @@ inline void invalidateRay(Ray& ray)
 
 inline void pushInstanceId(uniform RTCIntersectContext* uniform ctx, uniform unsigned int id)
 {
+#if RTC_MAX_INSTANCE_LEVEL_COUNT > 1
   ctx->instID[ctx->instStackSize++] = id;
+#else
+  ctx->instID[0] = id;
+#endif
 }
 
 inline void popInstanceId(uniform RTCIntersectContext* uniform ctx)
 {
+#if RTC_MAX_INSTANCE_LEVEL_COUNT > 1
   ctx->instID[--ctx->instStackSize] = RTC_INVALID_GEOMETRY_ID;
+#else
+  ctx->instID[0] = RTC_INVALID_GEOMETRY_ID;
+#endif
 }
 
 inline void copyInstanceIdStack(uniform const RTCIntersectContext* uniform ctx, varying unsigned* uniform tgt)
@@ -1012,11 +1007,6 @@ export void device_init (uniform int8* uniform cfg)
   colors[4][1] = make_Vec3f(1.0f, 1.0f, 1.0f);
   colors[4][2] = make_Vec3f(1.0f, 1.0f, 1.0f);
   colors[4][3] = make_Vec3f(1.0f, 1.0f, 1.0f);
-
-  /* set start render mode */
-  if (g_mode == MODE_NORMAL) renderTile = renderTileStandard;
-  else                       renderTile = renderTileStandardStream;
-  key_pressed_handler = device_key_pressed_default;
 }
 
 inline Vec3f face_forward(const Vec3f& dir, const Vec3f& _Ng) {
@@ -1266,8 +1256,25 @@ task void renderTileTask(uniform int* uniform pixels,
                          const uniform int numTilesX,
                          const uniform int numTilesY)
 {
-  renderTile(taskIndex,threadIndex,pixels,width,height,time,camera,numTilesX,numTilesY);
+  if (g_mode == MODE_NORMAL)
+    renderTileStandard(taskIndex,threadIndex,pixels,width,height,time,camera,numTilesX,numTilesY);
+  else
+    renderTileStandardStream(taskIndex,threadIndex,pixels,width,height,time,camera,numTilesX,numTilesY);
+  
 }
+
+export void renderFrameStandard (uniform int* uniform pixels,
+                          const uniform unsigned int width,
+                          const uniform unsigned int height,
+                          const uniform float time,
+                          const uniform ISPCCamera& camera)
+{
+  /* render all pixels */
+  const uniform int numTilesX = (width +TILE_SIZE_X-1)/TILE_SIZE_X;
+  const uniform int numTilesY = (height+TILE_SIZE_Y-1)/TILE_SIZE_Y;
+  launch[numTilesX*numTilesY] renderTileTask(pixels,width,height,time,camera,numTilesX,numTilesY); sync;
+}
+
 
 /* called by the C++ code to render */
 export void device_render (uniform int* uniform pixels,
@@ -1297,11 +1304,6 @@ export void device_render (uniform int* uniform pixels,
   updateInstance(g_scene,g_instance[2]);
   updateInstance(g_scene,g_instance[3]);
   rtcCommitScene (g_scene);
-
-  /* render all pixels */
-  const uniform int numTilesX = (width +TILE_SIZE_X-1)/TILE_SIZE_X;
-  const uniform int numTilesY = (height+TILE_SIZE_Y-1)/TILE_SIZE_Y;
-  launch[numTilesX*numTilesY] renderTileTask(pixels,width,height,time,camera,numTilesX,numTilesY); sync;
 }
 
 /* called by the C++ code for cleanup */

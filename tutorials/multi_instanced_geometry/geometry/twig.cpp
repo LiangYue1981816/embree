@@ -1,3 +1,6 @@
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
+
 namespace Twig {
   static const float vertices[] = {
     -1.36914e-08f, 0.4f, 0.4f, 1.36914e-08f, -0.4f, 0.4f, 1.36914e-08f, -0.4f,

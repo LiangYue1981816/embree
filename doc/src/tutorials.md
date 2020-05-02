@@ -118,6 +118,17 @@ to use a refitting strategy for these spheres, the other half uses the
 performance rebuild of their spatial data structure each frame. The
 spheres are colored based on the ID of the hit sphere geometry.
 
+Multi Scene Geometry
+-------------
+
+![][imgDynamicScene]
+
+This tutorial demonstrates the creation of multiple scenes sharing the
+same geometry objects.  Here, three scenes are built.  One with all
+the dynamic spheres of the Dynamic Scene test and two others each with
+half.  The ground plane is shared by all three scenes.  The space bar
+is used to cycle the scene chosen for rendering.
+
 User Geometry
 -------------
 
@@ -293,12 +304,57 @@ The number of time steps used can be configured using the `--time-steps
 geometry can be rendered at a specific time using the the `--time
 <float>` command line parameter.
 
+Quaternion Motion Blur
+----------------------
+
+![][imgQuaternionMotionBlur]
+
+This tutorial demonstrates rendering of motion blur using quaternion
+interpolation. Shown is motion blur using spherical linear interpolation of
+the rotational component of the instance transformation on the left and
+simple linear interpolation of the instance transformation on the right. The
+number of time steps can be modified as well.
+
+
 Interpolation
 -------------
 
 ![][imgInterpolation]
 
 This tutorial demonstrates interpolation of user-defined per-vertex data.
+
+Closest Point
+----------------------
+
+![][imgClosestPoint]
+
+This tutorial demonstrates a use-case of the point query API. The scene
+consists of a simple collection of objects that are instanced and for several
+point in the scene (red points) the closest point on the surfaces of the
+scene are computed (white points). The closest point functionality is
+implemented for Embree internal and for user-defined instancing. The tutorial
+also illustrates how to handle instance transformations that are not
+similarity transforms.
+
+Voronoi
+----------------------
+
+![][imgVoronoi]
+
+This tutorial demonstrates how to implement nearest neighbour lookups using
+the point query API. Several colored points are located on a plane and the
+corresponding voroni regions are illustrated.
+
+Collision Detection
+----------------------
+
+![][imgCollision]
+
+This tutorial demonstrates how to implement collision detection using
+the collide API. A simple cloth solver is setup to collide with a sphere.
+
+The cloth can be reset with the `space` bar.  The sim stepped once with `n` 
+and continuous simulation started and paused with `p`.
 
 BVH Builder
 -----------
@@ -323,4 +379,14 @@ to use an installed Embree. Under Linux and macOS the tutorial finds
 the Embree installation automatically, under Windows the `embree_DIR`
 CMake variable must be set to the following folder of the Embree
 installation: `C:\Program Files\Intel\Embree3`.
+
+Next Hit
+-----------
+
+This tutorial demonstrates how to robustly enumerate all hits along
+the ray using multiple ray queries and an intersection filter
+function. To improve performance, the tutorial also supports
+collecting the next N hits in a single ray query.
+
+
 

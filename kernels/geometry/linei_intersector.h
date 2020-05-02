@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -46,9 +33,9 @@ namespace embree
         return FlatLinearCurveIntersector1<Mx>::intersect(valid,ray,pre,v0,v1,Occluded1EpilogM<M,Mx,filter>(ray,context,line.geomID(),line.primID()));
       }
       
-      static __forceinline void pointQuery(PointQuery* query, PointQueryContext* context, const Primitive& line)
+      static __forceinline bool pointQuery(PointQuery* query, PointQueryContext* context, const Primitive& line)
       {
-        PrimitivePointQuery1<Primitive>::pointQuery(query, context, line);
+        return PrimitivePointQuery1<Primitive>::pointQuery(query, context, line);
       }
     };
 
@@ -74,9 +61,9 @@ namespace embree
         return FlatLinearCurveIntersector1<Mx>::intersect(valid,ray,pre,v0,v1,Occluded1EpilogM<M,Mx,filter>(ray,context,line.geomID(),line.primID()));
       }
       
-      static __forceinline void pointQuery(PointQuery* query, PointQueryContext* context, const Primitive& line)
+      static __forceinline bool pointQuery(PointQuery* query, PointQueryContext* context, const Primitive& line)
       {
-        PrimitivePointQuery1<Primitive>::pointQuery(query, context, line);
+        return PrimitivePointQuery1<Primitive>::pointQuery(query, context, line);
       }
     };
 

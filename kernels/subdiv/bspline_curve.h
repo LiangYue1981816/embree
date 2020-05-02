@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -108,6 +95,10 @@ namespace embree
         return 0.25f*(v0+v1+v2+v3);
       }
 
+      __forceinline BBox<Vertex> bounds() const {
+        return merge(BBox<Vertex>(v0),BBox<Vertex>(v1),BBox<Vertex>(v2),BBox<Vertex>(v3));
+      }
+      
       __forceinline friend BSplineCurveT operator -( const BSplineCurveT& a, const Vertex& b ) {
         return BSplineCurveT(a.v0-b,a.v1-b,a.v2-b,a.v3-b);
       }
@@ -280,7 +271,7 @@ namespace embree
         }
       }
       
-      friend inline std::ostream& operator<<(std::ostream& cout, const BSplineCurveT& curve) {
+      friend __forceinline embree_ostream operator<<(embree_ostream cout, const BSplineCurveT& curve) {
         return cout << "BSplineCurve { v0 = " << curve.v0 << ", v1 = " << curve.v1 << ", v2 = " << curve.v2 << ", v3 = " << curve.v3 << " }";
       }
     };

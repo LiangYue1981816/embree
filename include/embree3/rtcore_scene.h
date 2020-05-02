@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -40,6 +27,10 @@ enum RTCSceneFlags
 /* Creates a new scene. */
 RTC_API RTCScene rtcNewScene(RTCDevice device);
 
+/* Returns the device the scene got created in. The reference count of
+ * the device is incremented by this function. */
+RTC_API RTCDevice rtcGetSceneDevice(RTCScene hscene);
+   
 /* Retains the scene (increments the reference count). */
 RTC_API void rtcRetainScene(RTCScene scene);
 
@@ -89,16 +80,16 @@ RTC_API void rtcGetSceneBounds(RTCScene scene, struct RTCBounds* bounds_o);
 RTC_API void rtcGetSceneLinearBounds(RTCScene scene, struct RTCLinearBounds* bounds_o);
 
 /* Perform a closest point query of the scene. */
-RTC_API void rtcPointQuery(RTCScene scene, struct RTCPointQuery* query, struct RTCPointQueryInstanceStack* instStack, RTCPointQueryFunction queryFunc, void* userPtr);
+RTC_API bool rtcPointQuery(RTCScene scene, struct RTCPointQuery* query, struct RTCPointQueryContext* context, RTCPointQueryFunction queryFunc, void* userPtr);
 
 /* Perform a closest point query with a packet of 4 points with the scene. */
-RTC_API void rtcPointQuery4(const int* valid, RTCScene scene, struct RTCPointQuery4* query, RTCPointQueryFunction queryFunc, void** userPtr);
+RTC_API bool rtcPointQuery4(const int* valid, RTCScene scene, struct RTCPointQuery4* query, struct RTCPointQueryContext* context, RTCPointQueryFunction queryFunc, void** userPtr);
 
 /* Perform a closest point query with a packet of 4 points with the scene. */
-RTC_API void rtcPointQuery8(const int* valid, RTCScene scene, struct RTCPointQuery8* query, RTCPointQueryFunction queryFunc, void** userPtr);
+RTC_API bool rtcPointQuery8(const int* valid, RTCScene scene, struct RTCPointQuery8* query, struct RTCPointQueryContext* context, RTCPointQueryFunction queryFunc, void** userPtr);
 
 /* Perform a closest point query with a packet of 4 points with the scene. */
-RTC_API void rtcPointQuery16(const int* valid, RTCScene scene, struct RTCPointQuery16* query, RTCPointQueryFunction queryFunc, void** userPtr);
+RTC_API bool rtcPointQuery16(const int* valid, RTCScene scene, struct RTCPointQuery16* query, struct RTCPointQueryContext* context, RTCPointQueryFunction queryFunc, void** userPtr);
 
 /* Intersects a single ray with the scene. */
 RTC_API void rtcIntersect1(RTCScene scene, struct RTCIntersectContext* context, struct RTCRayHit* rayhit);
@@ -148,6 +139,13 @@ RTC_API void rtcOccludedNM(RTCScene scene, struct RTCIntersectContext* context, 
 /* Tests a stream of M ray packets of size N in SOA format for occlusion with the scene. */
 RTC_API void rtcOccludedNp(RTCScene scene, struct RTCIntersectContext* context, const struct RTCRayNp* ray, unsigned int N);
 
+/*! collision callback */
+struct RTCCollision { unsigned int geomID0; unsigned int primID0; unsigned int geomID1; unsigned int primID1; };
+typedef void (*RTCCollideFunc) (void* userPtr, struct RTCCollision* collisions, unsigned int num_collisions);
+
+/*! Performs collision detection of two scenes */
+RTC_API void rtcCollide (RTCScene scene0, RTCScene scene1, RTCCollideFunc callback, void* userPtr);
+ 
 #if defined(__cplusplus)
 
 /* Helper for easily combining scene flags */

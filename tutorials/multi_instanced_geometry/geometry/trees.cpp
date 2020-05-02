@@ -1,3 +1,6 @@
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
+
 namespace Trees {
   static const float localX[] = {
     -0.312215f, 1.15829f, 0.0298466f, 0.0434759f, 1.19264f, 0.125389f,

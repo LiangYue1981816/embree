@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2019 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
@@ -35,6 +22,7 @@ static_assert(RTC_MAX_INSTANCE_LEVEL_COUNT > 0,
 RTC_FORCEINLINE bool push(RTCIntersectContext* context, 
                           unsigned instanceId)
 {
+#if RTC_MAX_INSTANCE_LEVEL_COUNT > 1
   const bool spaceAvailable = context->instStackSize < RTC_MAX_INSTANCE_LEVEL_COUNT;
   /* We assert here because instances are silently dropped when the stack is full. 
      This might be quite hard to find in production. */
@@ -42,6 +30,13 @@ RTC_FORCEINLINE bool push(RTCIntersectContext* context,
   if (likely(spaceAvailable))
     context->instID[context->instStackSize++] = instanceId;
   return spaceAvailable;
+#else
+  const bool spaceAvailable = (context->instID[0] == RTC_INVALID_GEOMETRY_ID);
+  assert(spaceAvailable); 
+  if (likely(spaceAvailable))
+    context->instID[0] = instanceId;
+  return spaceAvailable;
+#endif
 }
 
 
@@ -51,8 +46,14 @@ RTC_FORCEINLINE bool push(RTCIntersectContext* context,
  */
 RTC_FORCEINLINE void pop(RTCIntersectContext* context)
 {
-  assert(context && context->instStackSize > 0);
+  assert(context);
+#if RTC_MAX_INSTANCE_LEVEL_COUNT > 1
+  assert(context->instStackSize > 0);
   context->instID[--context->instStackSize] = RTC_INVALID_GEOMETRY_ID;
+#else
+  assert(context->instID[0] != RTC_INVALID_GEOMETRY_ID);
+  context->instID[0] = RTC_INVALID_GEOMETRY_ID;
+#endif
 }
 
 /*******************************************************************************
